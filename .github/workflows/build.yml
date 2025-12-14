@@ -27,10 +27,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
 
@@ -78,11 +78,18 @@ jobs:
         run: npm run tauri:build -- --target ${{ matrix.target }}
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
+        if: always()
         with:
           name: xfastinstall-${{ matrix.platform }}-${{ matrix.target }}
           path: |
+            # Primary (target-triple specific) bundle outputs
             src-tauri/target/${{ matrix.target }}/release/bundle/**/*
-            src-tauri/target/${{ matrix.target }}/release/*.exe
-            src-tauri/target/${{ matrix.target }}/release/xfastinstall
+            src-tauri/target/${{ matrix.target }}/release/*
+            # Fallback locations (some toolchains place bundles under target/release)
+            src-tauri/target/release/bundle/**/*
+            src-tauri/target/release/*
+            # Generic catch-all for any release artifacts under src-tauri/target
+            src-tauri/target/**/release/bundle/**/*
+            src-tauri/target/**/release/*
           if-no-files-found: warn
