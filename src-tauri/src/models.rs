@@ -30,6 +30,7 @@ pub struct AnalysisResult {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct NavdataCycle {
     pub name: String,
     #[serde(default)]
