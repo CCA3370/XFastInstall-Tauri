@@ -135,6 +135,11 @@ sudo apt-get install libwebkit2gtk-4.1-dev build-essential libssl-dev
 
 ### Icon Not Found
 Ensure `src-tauri/icons/icon.png` is a valid RGBA PNG file.
+To generate the required Windows `.ico` from the PNG, run:
+
+```bash
+npm run generate:icon
+```
 
 ### Archive Extraction Fails
 Check that the archive format is supported (ZIP and 7z currently).

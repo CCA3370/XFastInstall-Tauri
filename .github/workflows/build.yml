@@ -55,6 +55,25 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
+      - name: Generate Windows icon
+        if: matrix.platform == 'windows-latest'
+        run: |
+          # ensure an .ico exists for tauri / windows resource generation
+          if (Test-Path src-tauri\icons\icon.png) {
+            # use the local npm script (installs as a devDependency during npm install)
+            npm run generate:icon
+          } else {
+            Write-Host "No src-tauri\icons\icon.png found; skipping icon generation"
+          }
+      - name: Verify Windows icon
+        if: matrix.platform == 'windows-latest'
+        run: |
+          if (!(Test-Path src-tauri\icons\icon.ico)) {
+            throw 'src-tauri\\icons\\icon.ico missing; icon generation failed'
+          } else {
+            Write-Host 'src-tauri\icons\icon.ico present'
+          }
+
       - name: Build Tauri app
         run: npm run tauri:build -- --target ${{ matrix.target }}
 
