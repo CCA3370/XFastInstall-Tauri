@@ -34,17 +34,16 @@ jobs:
           node-version: '20'
 
       - name: Install frontend deps
-        run: npm ci || npm install --no-audit --prefer-offline
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install --no-audit --prefer-offline
+          fi
 
-      - name: Install rollup native optional dep (x86_64)
-        if: matrix.arch == 'x86_64'
-        # Some npm versions don't install optional native deps correctly on CI; install the platform-specific rollup native package explicitly.
-        run: npm install @rollup/rollup-darwin-x64 --no-save
+      # rollup native optional deps are handled by `preinstall` script in package.json on macOS
 
-      - name: Install rollup native optional dep (aarch64)
-        if: matrix.arch == 'aarch64'
-        # Ensure rollup native for Apple Silicon is present to avoid `@rollup/rollup-darwin-arm64` MODULE_NOT_FOUND errors during vite build.
-        run: npm install @rollup/rollup-darwin-arm64 --no-save
+      # No macOS-specific rollup native installs belong in the Linux job
 
       - name: Cache Cargo and target
         id: cache-cargo
@@ -107,7 +106,13 @@ jobs:
           node-version: '20'
 
       - name: Install frontend deps
-        run: npm ci || npm install --no-audit --prefer-offline
+        shell: powershell
+        run: |
+          if (Test-Path package-lock.json) {
+            npm ci
+          } else {
+            npm install --no-audit --prefer-offline
+          }
 
       # (no platform-specific rollup install needed for Windows job)
 
@@ -171,7 +176,12 @@ jobs:
           node-version: '20'
 
       - name: Install frontend deps
-        run: npm ci || npm install --no-audit --prefer-offline
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install --no-audit --prefer-offline
+          fi
 
       - name: Cache Cargo and target
         id: cache-cargo

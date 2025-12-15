@@ -4,6 +4,7 @@
   "description": "X-Plane 12 Addon Installer",
   "type": "module",
   "scripts": {
+    "preinstall": "node scripts/install-rollup-native.js",
     "dev": "vite",
     "build": "vite build",
     "tauri": "tauri",
