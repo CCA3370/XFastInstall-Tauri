@@ -34,15 +34,7 @@ jobs:
           node-version: '20'
 
       - name: Install frontend deps
-        run: |
-          # Prefer `npm ci` when a lockfile exists; otherwise install and retry once to work around
-          # occasional optional-dependency install failures (rollup native binaries).
-          if [ -f package-lock.json ]; then
-            npm ci || npm install --no-audit --prefer-offline
-          else
-            npm install --no-audit --prefer-offline || npm install --no-audit --prefer-offline
-          fi
-          npm rebuild || true
+        run: npm ci || npm install --no-audit --prefer-offline
 
       - name: Cache Cargo and target
         id: cache-cargo
@@ -62,7 +54,7 @@ jobs:
       - name: Install system dependencies (Linux)
         run: |
           sudo apt-get update
-          # ubuntu-24.04 provides libwebkit2gtk-4.1-dev; prefer 4.1 over 4.0 which may be missing
+          # Use libwebkit2gtk-4.1-dev on newer Ubuntu images
           sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev build-essential pkg-config libssl-dev
 
       - name: Install Rust
@@ -105,16 +97,15 @@ jobs:
           node-version: '20'
 
       - name: Install frontend deps
-        shell: powershell
-        run: |
-          # Use package-lock.json when present, otherwise install. Retry once on failure to work
-          # around intermittent optional-dependency installation issues on hosted runners.
-          if (Test-Path package-lock.json) {
-            npm ci -ErrorAction SilentlyContinue; if ($LASTEXITCODE -ne 0) { npm install --no-audit --prefer-offline }
-          } else {
-            npm install --no-audit --prefer-offline -ErrorAction SilentlyContinue; if ($LASTEXITCODE -ne 0) { npm install --no-audit --prefer-offline }
-          }
-          npm rebuild || true
+        run: npm ci || npm install --no-audit --prefer-offline
+
+      - name: Install rollup native optional dep (x86_64)
+        if: matrix.arch == 'x86_64'
+        run: npm install @rollup/rollup-darwin-x64 --no-save
+
+      - name: Install rollup native optional dep (aarch64)
+        if: matrix.arch == 'aarch64'
+        run: npm install @rollup/rollup-darwin-arm64 --no-save
 
       - name: Cache Cargo and target
         id: cache-cargo
@@ -176,13 +167,7 @@ jobs:
           node-version: '20'
 
       - name: Install frontend deps
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci || npm install --no-audit --prefer-offline
-          else
-            npm install --no-audit --prefer-offline || npm install --no-audit --prefer-offline
-          fi
-          npm rebuild || true
+        run: npm ci || npm install --no-audit --prefer-offline
 
       - name: Cache Cargo and target
         id: cache-cargo
