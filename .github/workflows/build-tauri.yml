@@ -45,9 +45,12 @@ jobs:
       - name: Build Tauri (Portable EXE)
         run: npm run tauri:build
 
+      - name: Rename EXE
+        run: Move-Item -Path "src-tauri/target/release/xfastinstall.exe" -NewName "src-tauri/target/release/XFastInstall.exe" -Force
+
       - name: Upload Portable EXE
         uses: actions/upload-artifact@v4
         with:
           name: XFastInstall-windows-portable
-          path: '**/xfastinstall.exe'
+          path: '**/XFastInstall.exe'
           if-no-files-found: error
