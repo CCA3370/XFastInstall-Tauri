@@ -1,27 +1,25 @@
-# Dependencies
+# Node / Vite
 node_modules/
+dist/
+dist-ssr/
+.vite/
+*.tsbuildinfo
+.eslintcache
+.stylelintcache
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-package-lock.json
-yarn.lock
+pnpm-debug.log*
+.pnpm-store/
 
-# Build outputs
-dist/
-dist-ssr/
-*.local
-
-# Tauri
+# Rust / Tauri
+target/
 src-tauri/target/
+src-tauri/.cargo/
 src-tauri/Cargo.lock
 
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
+# Coverage
+coverage/
 
 # Environment
 .env
@@ -32,5 +30,11 @@ src-tauri/Cargo.lock
 logs/
 *.log
 
-# OS
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
 Thumbs.db

@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo tree:*)",
+      "Bash(cargo check:*)",
+      "Bash(npm run build:*)",
+      "Bash(cargo test:*)",
+      "WebSearch",
+      "WebFetch(domain:docs.rs)",
+      "WebFetch(domain:github.com)",
+      "Bash(copy \"C:\\\\Users\\\\Administrator\\\\Desktop\\\\XFastInstall-Tauri\\\\src-tauri\\\\icons\\\\icon.png\" \"C:\\\\Users\\\\Administrator\\\\Desktop\\\\XFastInstall-Tauri\\\\public\\\\icon.png\")"
+    ]
+  }
+}

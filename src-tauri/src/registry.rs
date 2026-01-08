@@ -47,11 +47,14 @@ pub fn unregister_context_menu() -> Result<()> {
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn register_context_menu() -> Result<(), String> {
-    Err("Context menu registration is only supported on Windows".to_string())
+use anyhow::Result;
+
+#[cfg(not(target_os = "windows"))]
+pub fn register_context_menu() -> Result<()> {
+    Err(anyhow::anyhow!("Context menu registration is only supported on Windows"))
 }
 
 #[cfg(not(target_os = "windows"))]
-pub fn unregister_context_menu() -> Result<(), String> {
-    Err("Context menu unregistration is only supported on Windows".to_string())
+pub fn unregister_context_menu() -> Result<()> {
+    Err(anyhow::anyhow!("Context menu unregistration is only supported on Windows"))
 }

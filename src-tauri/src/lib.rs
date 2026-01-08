@@ -27,8 +27,8 @@ fn analyze_addons(paths: Vec<String>, xplane_path: String) -> Result<AnalysisRes
 }
 
 #[tauri::command]
-fn install_addons(tasks: Vec<InstallTask>) -> Result<(), String> {
-    let installer = Installer::new();
+fn install_addons(app_handle: tauri::AppHandle, tasks: Vec<InstallTask>) -> Result<(), String> {
+    let installer = Installer::new(app_handle);
     installer
         .install(tasks)
         .map_err(|e| format!("Installation failed: {}", e))

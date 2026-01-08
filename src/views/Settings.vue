@@ -1,69 +1,190 @@
 <template>
-  <div class="settings-view p-8">
-    <div class="max-w-2xl mx-auto">
-      <h2 class="text-3xl font-bold mb-6">Settings</h2>
+  <div class="settings-view h-full flex flex-col p-5 overflow-hidden">
+    <!-- Header -->
+    <div class="mb-4 flex-shrink-0">
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-white"><AnimatedText>{{ $t('common.settings') }}</AnimatedText></h2>
+    </div>
 
-      <div class="settings-card bg-aviation-gray rounded-lg p-6 mb-6">
-        <h3 class="text-xl font-semibold mb-4">X-Plane Installation Path</h3>
-        <div class="flex gap-4">
-          <input
-            v-model="xplanePathInput"
-            type="text"
-            placeholder="/path/to/X-Plane"
-            class="flex-1 px-4 py-2 bg-gray-800 border border-gray-600 rounded focus:outline-none focus:border-blue-500"
-          />
-          <button
-            @click="selectFolder"
-            class="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded transition"
-          >
-            Browse
-          </button>
+    <!-- Scrollable Content Area -->
+    <div class="flex-1 overflow-y-auto space-y-4 pr-1">
+      
+      <!-- 1. X-Plane Path (Compact) -->
+      <section class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300">
+        <div class="p-4 space-y-3">
+          <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 bg-blue-100 dark:bg-blue-500/10 rounded-lg flex items-center justify-center flex-shrink-0 text-blue-600 dark:text-blue-400">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"></path>
+              </svg>
+            </div>
+            <div class="flex-1">
+              <h3 class="text-sm font-semibold text-gray-900 dark:text-white"><AnimatedText>{{ $t('settings.xplanePath') }}</AnimatedText></h3>
+            </div>
+          </div>
+
+          <div class="relative group">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <span class="text-gray-400 dark:text-gray-500">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
+                </svg>
+              </span>
+            </div>
+            <input
+              v-model="xplanePathInput"
+              type="text"
+              placeholder="C:\X-Plane 12"
+              class="w-full pl-9 pr-20 py-2 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700/50 rounded-lg text-sm text-gray-900 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300"
+            />
+            <button
+              type="button"
+              @click.stop.prevent="selectFolder"
+              class="absolute inset-y-1 right-1 px-3 py-0.5 bg-gray-200 dark:bg-gray-700/50 hover:bg-gray-300 dark:hover:bg-gray-600/50 text-gray-700 dark:text-gray-300 text-xs rounded-md transition-colors flex items-center space-x-1 border border-transparent dark:border-white/5"
+            >
+              <span><AnimatedText>{{ $t('common.browse') }}</AnimatedText></span>
+            </button>
+          </div>
+          
+          <!-- Auto-save status -->
+          <div class="h-4 flex items-center justify-end px-1">
+            <transition name="fade">
+              <div v-if="saveStatus" class="flex items-center text-[10px] font-medium space-x-1" :class="saveStatus === 'saved' ? 'text-emerald-500' : 'text-gray-400'">
+                <svg v-if="saveStatus === 'saved'" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+                <svg v-else class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+                <span>{{ saveStatus === 'saved' ? $t('settings.saved') : $t('settings.saving') }}</span>
+              </div>
+            </transition>
+          </div>
         </div>
-        <button
-          @click="savePath"
-          class="mt-4 px-6 py-2 bg-green-600 hover:bg-green-700 rounded transition"
-        >
-          Save
-        </button>
-        <p v-if="saveMessage" class="mt-2 text-sm" :class="saveMessage.includes('Error') ? 'text-red-400' : 'text-green-400'">
-          {{ saveMessage }}
-        </p>
-      </div>
+      </section>
 
-      <div class="settings-card bg-aviation-gray rounded-lg p-6 mb-6" v-if="isWindows">
-        <h3 class="text-xl font-semibold mb-4">Windows Integration</h3>
-        <p class="mb-4 text-sm opacity-75">Add "Install to X-Plane" to the Windows context menu (right-click menu)</p>
-        <button
-          @click="registerContextMenu"
-          class="px-6 py-2 bg-blue-600 hover:bg-blue-700 rounded transition mr-4"
-        >
-          Register Context Menu
-        </button>
-        <button
-          @click="unregisterContextMenu"
-          class="px-6 py-2 bg-red-600 hover:bg-red-700 rounded transition"
-        >
-          Unregister
-        </button>
-        <p v-if="registryMessage" class="mt-2 text-sm text-blue-400">
-          {{ registryMessage }}
-        </p>
+      <!-- 2. Grid for Preferences & System -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 h-full">
+        
+        <!-- Installation Preferences (Left Column) -->
+        <section class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300 flex flex-col">
+          <div class="p-4 space-y-3 flex-1">
+            <div class="flex items-center space-x-3 mb-2">
+              <div class="w-8 h-8 bg-green-100 dark:bg-green-500/10 rounded-lg flex items-center justify-center flex-shrink-0 text-green-600 dark:text-green-400">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white"><AnimatedText>{{ $t('settings.installPreferences') }}</AnimatedText></h3>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div v-for="type in addonTypes" :key="type" class="flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-900/30 border border-gray-100 dark:border-white/5">
+                <span class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate mr-2" :title="getTypeName(type)">{{ getTypeName(type) }}</span>
+                <button 
+                  @click="store.togglePreference(type)"
+                  class="relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 focus:outline-none flex-shrink-0"
+                  :class="store.installPreferences[type] ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'"
+                >
+                  <span
+                    class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200 shadow-sm"
+                    :class="store.installPreferences[type] ? 'translate-x-3.5' : 'translate-x-0.5'"
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- System & About Column (Right Column) -->
+        <div class="flex flex-col gap-4">
+          
+          <!-- System (Windows only) -->
+          <transition name="slide-up">
+            <section v-if="isWindows" class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300">
+              <div class="p-4 flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                  <div class="w-8 h-8 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0 text-gray-600 dark:text-gray-300">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                    </svg>
+                  </div>
+                  <h3 class="text-sm font-semibold text-gray-900 dark:text-white"><AnimatedText>{{ $t('settings.windowsIntegration') }}</AnimatedText></h3>
+                </div>
+
+                <button
+                  @click="toggleContextMenu"
+                  :disabled="isProcessing"
+                  class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 focus:ring-offset-white dark:focus:ring-offset-gray-900"
+                  :class="isContextRegistered ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-700'"
+                >
+                  <span
+                    class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform duration-300 shadow-sm"
+                    :class="isContextRegistered ? 'translate-x-4.5' : 'translate-x-0.5'"
+                  />
+                </button>
+              </div>
+            </section>
+          </transition>
+
+          <!-- About -->
+          <section class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300 flex-1">
+            <div class="p-4 flex items-center space-x-4 h-full">
+              <div class="w-12 h-12 rounded-xl shadow-lg transform rotate-3 flex-shrink-0 overflow-hidden">
+                <img src="/icon.png" alt="XFastInstall" class="w-full h-full object-cover" />
+              </div>
+              <div>
+                <h3 class="text-base font-bold text-gray-900 dark:text-white">XFastInstall</h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  v0.1.0 • © 2026
+                </p>
+              </div>
+            </div>
+          </section>
+
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
+import { useToastStore } from '@/stores/toast'
+import { useModalStore } from '@/stores/modal'
 import { useAppStore } from '@/stores/app'
+import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
+import AnimatedText from '@/components/AnimatedText.vue'
+import { AddonType } from '@/types'
 
+const { t } = useI18n()
 const store = useAppStore()
+const toast = useToastStore()
+const modal = useModalStore()
+
 const xplanePathInput = ref('')
-const saveMessage = ref('')
-const registryMessage = ref('')
 const isWindows = ref(false)
+const isContextRegistered = ref(false)
+const isProcessing = ref(false)
+const saveStatus = ref<'saving' | 'saved' | null>(null)
+let saveTimeout: ReturnType<typeof setTimeout> | null = null
+
+const addonTypes = [AddonType.Aircraft, AddonType.Scenery, AddonType.SceneryLibrary, AddonType.Plugin, AddonType.Navdata]
+
+function getTypeName(type: AddonType): string {
+  switch (type) {
+    case AddonType.Aircraft: return t('settings.typeAircraft')
+    case AddonType.Scenery: return t('settings.typeScenery')
+    case AddonType.SceneryLibrary: return t('settings.typeSceneryLibrary')
+    case AddonType.Plugin: return t('settings.typePlugin')
+    case AddonType.Navdata: return t('settings.typeNavdata')
+    default: return type
+  }
+}
 
 onMounted(async () => {
   xplanePathInput.value = store.xplanePath
@@ -73,6 +194,23 @@ onMounted(async () => {
     isWindows.value = platform === 'windows'
   } catch (error) {
     console.error('Failed to get platform:', error)
+  }
+})
+
+// Auto-save logic
+watch(xplanePathInput, (newValue) => {
+  if (saveTimeout) clearTimeout(saveTimeout)
+  
+  // Only save if different from store and not empty (or allow empty to clear)
+  if (newValue !== store.xplanePath) {
+    saveStatus.value = 'saving'
+    saveTimeout = setTimeout(() => {
+      store.setXplanePath(newValue)
+      saveStatus.value = 'saved'
+      setTimeout(() => {
+        saveStatus.value = null
+      }, 2000)
+    }, 800) // 800ms debounce
   }
 })
 
@@ -86,46 +224,35 @@ async function selectFolder() {
     
     if (selected) {
       xplanePathInput.value = selected as string
+      // Immediate save on selection
+      if (saveTimeout) clearTimeout(saveTimeout)
+      store.setXplanePath(xplanePathInput.value)
+      saveStatus.value = 'saved'
+      setTimeout(() => { saveStatus.value = null }, 2000)
     }
   } catch (error) {
     console.error('Failed to open folder dialog:', error)
+    modal.showError(t('common.error') + ': ' + String(error))
   }
 }
 
-function savePath() {
-  if (!xplanePathInput.value) {
-    saveMessage.value = 'Error: Please enter a path'
-    return
-  }
-
-  store.setXplanePath(xplanePathInput.value)
-  saveMessage.value = '✓ Path saved successfully'
-  setTimeout(() => {
-    saveMessage.value = ''
-  }, 3000)
-}
-
-async function registerContextMenu() {
+async function toggleContextMenu() {
+  if (isProcessing.value) return
+  isProcessing.value = true
   try {
-    await invoke('register_context_menu')
-    registryMessage.value = '✓ Context menu registered successfully'
+    if (!isContextRegistered.value) {
+      await invoke('register_context_menu')
+      toast.success(t('settings.contextMenuRegistered'))
+      isContextRegistered.value = true
+    } else {
+      await invoke('unregister_context_menu')
+      toast.success(t('settings.contextMenuUnregistered'))
+      isContextRegistered.value = false
+    }
   } catch (error) {
-    registryMessage.value = 'Error: ' + error
-  }
-}
-
-async function unregisterContextMenu() {
-  try {
-    await invoke('unregister_context_menu')
-    registryMessage.value = '✓ Context menu unregistered successfully'
-  } catch (error) {
-    registryMessage.value = 'Error: ' + error
+    modal.showError(t('common.error') + ': ' + String(error))
+  } finally {
+    isProcessing.value = false
   }
 }
 </script>
-
-<style scoped>
-.settings-card {
-  border: 1px solid rgba(59, 130, 246, 0.2);
-}
-</style>

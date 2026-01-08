@@ -152,6 +152,7 @@ impl Scanner {
             addon_type: AddonType::Aircraft,
             path: install_path.to_string_lossy().to_string(),
             display_name,
+            archive_internal_root: None,
         }))
     }
 
@@ -159,33 +160,49 @@ impl Scanner {
         let path = PathBuf::from(file_path);
         let parent = path.parent();
 
-        let display_name = if let Some(p) = parent {
+        // Determine the aircraft root folder inside the archive
+        let (display_name, internal_root) = if let Some(p) = parent {
             if p.as_os_str().is_empty() {
-                // .acf is in root, use archive name
+                // .acf is in archive root, use archive name as display name
+                // Internal root is empty (extract all to target)
+                (
+                    archive_path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("Unknown Aircraft")
+                        .to_string(),
+                    None,
+                )
+            } else {
+                // Get the top-level folder in the archive
+                let components: Vec<_> = p.components().collect();
+                let top_folder = components.first()
+                    .map(|c| c.as_os_str().to_string_lossy().to_string());
+
+                // Use parent folder name as display name
+                let name = p.file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("Unknown Aircraft")
+                    .to_string();
+
+                (name, top_folder)
+            }
+        } else {
+            (
                 archive_path
                     .file_stem()
                     .and_then(|s| s.to_str())
                     .unwrap_or("Unknown Aircraft")
-                    .to_string()
-            } else {
-                // Use parent folder name
-                p.file_name()
-                    .and_then(|s| s.to_str())
-                    .unwrap_or("Unknown Aircraft")
-                    .to_string()
-            }
-        } else {
-            archive_path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("Unknown Aircraft")
-                .to_string()
+                    .to_string(),
+                None,
+            )
         };
 
         Ok(Some(DetectedItem {
             addon_type: AddonType::Aircraft,
             path: archive_path.to_string_lossy().to_string(),
             display_name,
+            archive_internal_root: internal_root,
         }))
     }
 
@@ -213,23 +230,23 @@ impl Scanner {
         let display_name = parent
             .file_name()
             .and_then(|s| s.to_str())
-            .unwrap_or("Unknown Scenery")
+            .unwrap_or("Unknown Library")
             .to_string();
 
         Ok(Some(DetectedItem {
-            addon_type: AddonType::Scenery,
+            addon_type: AddonType::SceneryLibrary,
             path: parent.to_string_lossy().to_string(),
             display_name,
+            archive_internal_root: None,
         }))
     }
 
     fn detect_scenery_by_dsf(&self, file_path: &Path) -> Result<Option<DetectedItem>> {
-        // Go UP 2 levels from the .dsf file
-        let parent = file_path.parent()
-            .and_then(|p| p.parent())
-            .and_then(|p| p.parent());
+        // DSF structure: {Scenery}/Earth nav data/{...}/{file}.dsf
+        // Search upward for "Earth nav data" folder, then go one more level up
+        let install_dir = self.find_scenery_root_from_dsf(file_path);
 
-        if let Some(install_dir) = parent {
+        if let Some(install_dir) = install_dir {
             let display_name = install_dir
                 .file_name()
                 .and_then(|s| s.to_str())
@@ -240,53 +257,135 @@ impl Scanner {
                 addon_type: AddonType::Scenery,
                 path: install_dir.to_string_lossy().to_string(),
                 display_name,
+                archive_internal_root: None,
             }))
         } else {
             Ok(None)
         }
     }
 
+    /// Find scenery root by searching upward for "Earth nav data" folder
+    fn find_scenery_root_from_dsf(&self, dsf_path: &Path) -> Option<PathBuf> {
+        let mut current = dsf_path.parent()?;
+
+        // Search upward for "Earth nav data" folder (max 10 levels to prevent infinite loop)
+        for _ in 0..10 {
+            if let Some(name) = current.file_name().and_then(|s| s.to_str()) {
+                if name == "Earth nav data" {
+                    // Found it! Go one level up to get scenery root
+                    return current.parent().map(|p| p.to_path_buf());
+                }
+            }
+            current = current.parent()?;
+        }
+
+        None
+    }
+
     fn detect_scenery_library(&self, file_path: &str, archive_path: &Path) -> Result<Option<DetectedItem>> {
         let path = PathBuf::from(file_path);
         let parent = path.parent();
 
-        let display_name = if let Some(p) = parent {
-            p.file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("Unknown Scenery")
-                .to_string()
+        // Get the scenery library folder name (parent of library.txt)
+        let (display_name, internal_root) = if let Some(p) = parent {
+            if p.as_os_str().is_empty() {
+                // library.txt is in archive root
+                (
+                    archive_path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("Unknown Library")
+                        .to_string(),
+                    None,
+                )
+            } else {
+                // The folder containing library.txt is the library root
+                let library_root = p.to_string_lossy().to_string();
+                let name = p.file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("Unknown Library")
+                    .to_string();
+
+                (name, Some(library_root))
+            }
         } else {
-            "Unknown Scenery".to_string()
+            (
+                archive_path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("Unknown Library")
+                    .to_string(),
+                None,
+            )
         };
 
         Ok(Some(DetectedItem {
-            addon_type: AddonType::Scenery,
+            addon_type: AddonType::SceneryLibrary,
             path: archive_path.to_string_lossy().to_string(),
             display_name,
+            archive_internal_root: internal_root,
         }))
     }
 
     fn detect_scenery_dsf(&self, file_path: &str, archive_path: &Path) -> Result<Option<DetectedItem>> {
         let path = PathBuf::from(file_path);
-        // Go up 2 levels
-        let parent = path.parent()
-            .and_then(|p| p.parent())
-            .and_then(|p| p.parent());
 
-        let display_name = if let Some(p) = parent {
-            p.file_name()
-                .and_then(|s| s.to_str())
-                .unwrap_or("Unknown Scenery")
-                .to_string()
+        // DSF structure: {Scenery}/Earth nav data/{...}/{file}.dsf
+        // Search upward for "Earth nav data" folder, then go one more level up
+        let scenery_root = self.find_scenery_root_from_archive_path(&path);
+
+        let (display_name, internal_root) = if let Some(root) = scenery_root {
+            if root.as_os_str().is_empty() {
+                // Scenery is at archive root level
+                (
+                    archive_path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("Unknown Scenery")
+                        .to_string(),
+                    None,
+                )
+            } else {
+                let root_str = root.to_string_lossy().to_string();
+                let name = root.file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("Unknown Scenery")
+                    .to_string();
+
+                (name, Some(root_str))
+            }
         } else {
-            "Unknown Scenery".to_string()
+            // Couldn't find "Earth nav data" folder, skip this file
+            return Ok(None);
         };
 
         Ok(Some(DetectedItem {
             addon_type: AddonType::Scenery,
             path: archive_path.to_string_lossy().to_string(),
             display_name,
+            archive_internal_root: internal_root,
         }))
+    }
+
+    /// Find scenery root from archive path by searching for "Earth nav data"
+    fn find_scenery_root_from_archive_path(&self, dsf_path: &Path) -> Option<PathBuf> {
+        let mut current = dsf_path.parent()?;
+
+        // Search upward for "Earth nav data" folder
+        for _ in 0..10 {
+            if let Some(name) = current.file_name().and_then(|s| s.to_str()) {
+                if name == "Earth nav data" {
+                    // Found it! Go one level up to get scenery root
+                    return current.parent().map(|p| p.to_path_buf());
+                }
+            }
+            match current.parent() {
+                Some(p) if !p.as_os_str().is_empty() => current = p,
+                _ => break,
+            }
+        }
+
+        None
     }
 
     // Type C: Plugin Detection
@@ -325,6 +424,7 @@ impl Scanner {
             addon_type: AddonType::Plugin,
             path: install_path.to_string_lossy().to_string(),
             display_name,
+            archive_internal_root: None,
         }))
     }
 
@@ -332,35 +432,50 @@ impl Scanner {
         let path = PathBuf::from(file_path);
         let parent = path.parent();
 
-        let display_name = if let Some(p) = parent {
+        let (display_name, internal_root) = if let Some(p) = parent {
             let parent_name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
-            
+
             // Check if parent is platform-specific
-            if matches!(
+            let plugin_root = if matches!(
                 parent_name,
                 "32" | "64" | "win" | "lin" | "mac" | "win_x64" | "mac_x64" | "lin_x64"
             ) {
                 // Go up one more level
-                if let Some(grandparent) = p.parent() {
-                    grandparent
-                        .file_name()
+                p.parent()
+            } else {
+                Some(p)
+            };
+
+            if let Some(root) = plugin_root {
+                if root.as_os_str().is_empty() {
+                    (
+                        archive_path
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("Unknown Plugin")
+                            .to_string(),
+                        None,
+                    )
+                } else {
+                    let root_str = root.to_string_lossy().to_string();
+                    let name = root.file_name()
                         .and_then(|s| s.to_str())
                         .unwrap_or("Unknown Plugin")
-                        .to_string()
-                } else {
-                    "Unknown Plugin".to_string()
+                        .to_string();
+                    (name, Some(root_str))
                 }
             } else {
-                parent_name.to_string()
+                ("Unknown Plugin".to_string(), None)
             }
         } else {
-            "Unknown Plugin".to_string()
+            ("Unknown Plugin".to_string(), None)
         };
 
         Ok(Some(DetectedItem {
             addon_type: AddonType::Plugin,
             path: archive_path.to_string_lossy().to_string(),
             display_name,
+            archive_internal_root: internal_root,
         }))
     }
 
@@ -393,12 +508,16 @@ impl Scanner {
             addon_type: AddonType::Navdata,
             path: install_path.to_string_lossy().to_string(),
             display_name,
+            archive_internal_root: None,
         }))
     }
 
-    fn detect_navdata_in_archive(&self, _file_path: &str, content: &str, archive_path: &Path) -> Result<Option<DetectedItem>> {
+    fn detect_navdata_in_archive(&self, file_path: &str, content: &str, archive_path: &Path) -> Result<Option<DetectedItem>> {
         let cycle: NavdataCycle = serde_json::from_str(content)
             .context("Failed to parse cycle.json")?;
+
+        let path = PathBuf::from(file_path);
+        let parent = path.parent();
 
         let display_name = if cycle.name.contains("X-Plane") || cycle.name.contains("X-Plane 11") {
             format!("Navdata: {}", cycle.name)
@@ -408,10 +527,22 @@ impl Scanner {
             return Err(anyhow::anyhow!("Unknown Navdata Format: {}", cycle.name));
         };
 
+        // Get the navdata folder root inside the archive
+        let internal_root = if let Some(p) = parent {
+            if p.as_os_str().is_empty() {
+                None
+            } else {
+                Some(p.to_string_lossy().to_string())
+            }
+        } else {
+            None
+        };
+
         Ok(Some(DetectedItem {
             addon_type: AddonType::Navdata,
             path: archive_path.to_string_lossy().to_string(),
             display_name,
+            archive_internal_root: internal_root,
         }))
     }
 }

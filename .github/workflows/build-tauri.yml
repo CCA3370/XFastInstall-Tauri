@@ -1,0 +1,48 @@
+name: Build Tauri (Windows Portable)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_INCREMENTAL: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-windows-portable:
+    name: Windows (Portable EXE)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          cache-all-crates: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build Tauri (Portable EXE)
+        run: npm run tauri:build
+
+      - name: Upload Portable EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: XFastInstall-windows-portable
+          path: src-tauri/target/release/XFastInstall.exe
+          if-no-files-found: error

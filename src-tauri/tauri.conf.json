@@ -12,9 +12,9 @@
     "windows": [
       {
         "title": "XFastInstall - X-Plane Addon Installer",
-        "width": 1000,
-        "height": 700,
-        "resizable": true,
+        "width": 600,
+        "height": 500,
+        "resizable": false,
         "fullscreen": false,
         "dragDropEnabled": true
       }

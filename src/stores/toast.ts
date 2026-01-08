@@ -10,13 +10,10 @@ export interface Toast {
 export const useToastStore = defineStore('toast', () => {
   const toasts = ref<Toast[]>([])
 
-  function show(message: string, type: Toast['type'] = 'info', duration = 5000) {
+  function show(message: string, type: Toast['type'] = 'info') {
     const id = Date.now().toString() + Math.random()
     toasts.value.push({ id, message, type })
-
-    setTimeout(() => {
-      remove(id)
-    }, duration)
+    // Toast removal is handled by animationend event in ToastNotification.vue
   }
 
   function remove(id: string) {

@@ -23,59 +23,115 @@ impl Analyzer {
         // Scan all paths
         for path_str in paths {
             let path = Path::new(&path_str);
-            
+
             match self.scanner.scan_path(path) {
                 Ok(detected) => all_detected.extend(detected),
                 Err(e) => errors.push(format!("Failed to scan {}: {}", path_str, e)),
             }
         }
 
-        // Deduplicate items
+        // Deduplicate detected items by source path hierarchy
         let deduplicated = self.deduplicate(all_detected);
 
         // Convert to install tasks
-        let tasks = deduplicated
+        let tasks: Vec<InstallTask> = deduplicated
             .into_iter()
             .map(|item| self.create_install_task(item, xplane_path))
             .collect();
 
+        // Deduplicate tasks by target path (e.g., multiple .acf files in same aircraft folder)
+        let tasks = self.deduplicate_by_target_path(tasks);
+
         AnalysisResult { tasks, errors }
     }
 
+    /// Deduplicate install tasks based on target_path
+    /// Multiple items with the same target path are merged into one task
+    fn deduplicate_by_target_path(&self, tasks: Vec<InstallTask>) -> Vec<InstallTask> {
+        use std::collections::HashMap;
+
+        let mut seen: HashMap<String, InstallTask> = HashMap::new();
+
+        for task in tasks {
+            // Use target_path as the key for deduplication
+            if !seen.contains_key(&task.target_path) {
+                seen.insert(task.target_path.clone(), task);
+            }
+            // If already exists, skip (keep the first one)
+        }
+
+        seen.into_values().collect()
+    }
+
     /// Deduplicate detected items based on path hierarchy
+    /// Different addon types are deduplicated separately to allow multiple types from one archive
     fn deduplicate(&self, items: Vec<DetectedItem>) -> Vec<DetectedItem> {
+        use std::collections::HashMap;
+
+        // Group items by addon type first
+        let mut by_type: HashMap<AddonType, Vec<DetectedItem>> = HashMap::new();
+        for item in items {
+            by_type.entry(item.addon_type.clone()).or_default().push(item);
+        }
+
+        let mut result: Vec<DetectedItem> = Vec::new();
+
+        // Deduplicate within each type
+        for (_addon_type, type_items) in by_type {
+            let deduped = self.deduplicate_same_type(type_items);
+            result.extend(deduped);
+        }
+
+        result
+    }
+
+    /// Deduplicate items of the same type based on path hierarchy
+    fn deduplicate_same_type(&self, items: Vec<DetectedItem>) -> Vec<DetectedItem> {
         let mut result: Vec<DetectedItem> = Vec::new();
 
         for item in items {
-            let item_path = PathBuf::from(&item.path);
+            // For archives, use archive_internal_root as the effective path for deduplication
+            // For directories, use the actual path
+            let item_effective_path = self.get_effective_path(&item);
             let mut should_add = true;
 
             // Check if this item is a subdirectory of any existing item
             for existing in &result {
-                let existing_path = PathBuf::from(&existing.path);
+                let existing_effective_path = self.get_effective_path(existing);
 
-                // If item is under existing path, skip it
-                if item_path.starts_with(&existing_path) {
-                    should_add = false;
-                    break;
+                // Only compare items from the same source (same archive or same root)
+                if !self.same_source(&item, existing) {
+                    continue;
                 }
 
-                // If existing is under item path, remove existing and add item
-                if existing_path.starts_with(&item_path) {
-                    should_add = true;
-                    // Mark existing for removal
+                // If item is under existing path, skip it
+                if item_effective_path.starts_with(&existing_effective_path)
+                   && item_effective_path != existing_effective_path {
+                    should_add = false;
+                    break;
                 }
             }
 
             if should_add {
                 // Remove any items that are subdirectories of this item
                 result.retain(|existing| {
-                    let existing_path = PathBuf::from(&existing.path);
-                    !existing_path.starts_with(&item_path) || existing_path == item_path
+                    if !self.same_source(&item, existing) {
+                        return true; // Keep items from different sources
+                    }
+
+                    let existing_effective_path = self.get_effective_path(existing);
+                    let item_effective_path = self.get_effective_path(&item);
+
+                    !existing_effective_path.starts_with(&item_effective_path)
+                        || existing_effective_path == item_effective_path
                 });
 
-                // Check for duplicates
-                if !result.iter().any(|e| e.path == item.path) {
+                // Check for exact duplicates
+                let dominated = result.iter().any(|e| {
+                    self.same_source(&item, e) && self.get_effective_path(e) == item_effective_path
+                });
+
+                if !dominated {
                     result.push(item);
                 }
             }
@@ -84,13 +140,37 @@ impl Analyzer {
         result
     }
 
+    /// Get the effective path for deduplication
+    /// For archives, this is the internal root; for directories, it's the actual path
+    fn get_effective_path(&self, item: &DetectedItem) -> PathBuf {
+        if let Some(ref internal_root) = item.archive_internal_root {
+            PathBuf::from(internal_root)
+        } else {
+            PathBuf::from(&item.path)
+        }
+    }
+
+    /// Check if two items come from the same source (same archive or same root directory)
+    fn same_source(&self, a: &DetectedItem, b: &DetectedItem) -> bool {
+        // For archives (both have archive_internal_root or same archive path)
+        if a.archive_internal_root.is_some() || b.archive_internal_root.is_some() {
+            // They're from the same archive if their paths (archive paths) are the same
+            a.path == b.path
+        } else {
+            // For directories, check if they share a common root
+            let a_path = PathBuf::from(&a.path);
+            let b_path = PathBuf::from(&b.path);
+            a_path.starts_with(&b_path) || b_path.starts_with(&a_path)
+        }
+    }
+
     /// Create an install task from a detected item
     fn create_install_task(&self, item: DetectedItem, xplane_path: &str) -> InstallTask {
         let xplane_root = Path::new(xplane_path);
-        
+
         let target_base = match item.addon_type {
             AddonType::Aircraft => xplane_root.join("Aircraft"),
-            AddonType::Scenery => xplane_root.join("Custom Scenery"),
+            AddonType::Scenery | AddonType::SceneryLibrary => xplane_root.join("Custom Scenery"),
             AddonType::Plugin => xplane_root.join("Resources").join("plugins"),
             AddonType::Navdata => {
                 // Determine if it's GNS430 or main Custom Data
@@ -102,12 +182,8 @@ impl Analyzer {
             }
         };
 
-        let folder_name = Path::new(&item.path)
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("unknown");
-
-        let target_path = target_base.join(folder_name);
+        // Use display_name as the target folder name
+        let target_path = target_base.join(&item.display_name);
 
         // Check if target already exists
         let conflict_exists = target_path.exists();
@@ -119,6 +195,8 @@ impl Analyzer {
             target_path: target_path.to_string_lossy().to_string(),
             display_name: item.display_name,
             conflict_exists: if conflict_exists { Some(true) } else { None },
+            archive_internal_root: item.archive_internal_root,
+            should_overwrite: false, // Default to false, controlled by frontend
         }
     }
 }
@@ -128,26 +206,232 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_deduplication() {
+    fn test_deduplication_same_type() {
         let analyzer = Analyzer::new();
 
+        // Same type (Aircraft), nested paths - should deduplicate
         let items = vec![
             DetectedItem {
                 addon_type: AddonType::Aircraft,
                 path: "/test/A330".to_string(),
                 display_name: "A330".to_string(),
+                archive_internal_root: None,
             },
             DetectedItem {
-                addon_type: AddonType::Plugin,
-                path: "/test/A330/plugins/fms".to_string(),
-                display_name: "FMS".to_string(),
+                addon_type: AddonType::Aircraft,
+                path: "/test/A330/variant".to_string(),
+                display_name: "A330 Variant".to_string(),
+                archive_internal_root: None,
             },
         ];
 
         let result = analyzer.deduplicate(items);
 
-        // Should only have the Aircraft, not the plugin (subdirectory)
+        // Should only have the parent Aircraft
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].addon_type, AddonType::Aircraft);
+        assert_eq!(result[0].display_name, "A330");
+    }
+
+    #[test]
+    fn test_deduplication_different_types() {
+        let analyzer = Analyzer::new();
+
+        // Different types from same directory tree - should keep both
+        let items = vec![
+            DetectedItem {
+                addon_type: AddonType::Aircraft,
+                path: "/test/A330".to_string(),
+                display_name: "A330".to_string(),
+                archive_internal_root: None,
+            },
+            DetectedItem {
+                addon_type: AddonType::Plugin,
+                path: "/test/A330/plugins/fms".to_string(),
+                display_name: "FMS".to_string(),
+                archive_internal_root: None,
+            },
+        ];
+
+        let result = analyzer.deduplicate(items);
+
+        // Should have both because they are different types
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_deduplication_archive_multi_type() {
+        let analyzer = Analyzer::new();
+
+        // Multiple types from same archive - should keep all
+        let items = vec![
+            DetectedItem {
+                addon_type: AddonType::Aircraft,
+                path: "/test/package.zip".to_string(),
+                display_name: "A330".to_string(),
+                archive_internal_root: Some("A330".to_string()),
+            },
+            DetectedItem {
+                addon_type: AddonType::Plugin,
+                path: "/test/package.zip".to_string(),
+                display_name: "FMS Plugin".to_string(),
+                archive_internal_root: Some("plugins/fms".to_string()),
+            },
+            DetectedItem {
+                addon_type: AddonType::Scenery,
+                path: "/test/package.zip".to_string(),
+                display_name: "Airport".to_string(),
+                archive_internal_root: Some("scenery/airport".to_string()),
+            },
+            DetectedItem {
+                addon_type: AddonType::SceneryLibrary,
+                path: "/test/package.zip".to_string(),
+                display_name: "Library".to_string(),
+                archive_internal_root: Some("library".to_string()),
+            },
+        ];
+
+        let result = analyzer.deduplicate(items);
+
+        // Should have all four because they are different types
+        assert_eq!(result.len(), 4);
+    }
+
+    #[test]
+    fn test_deduplication_archive_same_type_nested() {
+        let analyzer = Analyzer::new();
+
+        // Same type, nested paths in archive - should deduplicate
+        let items = vec![
+            DetectedItem {
+                addon_type: AddonType::Plugin,
+                path: "/test/package.zip".to_string(),
+                display_name: "MainPlugin".to_string(),
+                archive_internal_root: Some("plugins".to_string()),
+            },
+            DetectedItem {
+                addon_type: AddonType::Plugin,
+                path: "/test/package.zip".to_string(),
+                display_name: "SubPlugin".to_string(),
+                archive_internal_root: Some("plugins/sub".to_string()),
+            },
+        ];
+
+        let result = analyzer.deduplicate(items);
+
+        // Should only have the parent plugin
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].display_name, "MainPlugin");
+    }
+
+    #[test]
+    fn test_deduplicate_by_target_path() {
+        let analyzer = Analyzer::new();
+
+        // Multiple .acf files in same aircraft folder -> same target path
+        let tasks = vec![
+            InstallTask {
+                id: "1".to_string(),
+                addon_type: AddonType::Aircraft,
+                source_path: "/downloads/A330/A330.acf".to_string(),
+                target_path: "/X-Plane/Aircraft/A330".to_string(),
+                display_name: "A330".to_string(),
+                conflict_exists: None,
+                archive_internal_root: None,
+                should_overwrite: false,
+            },
+            InstallTask {
+                id: "2".to_string(),
+                addon_type: AddonType::Aircraft,
+                source_path: "/downloads/A330/A330_cargo.acf".to_string(),
+                target_path: "/X-Plane/Aircraft/A330".to_string(),
+                display_name: "A330".to_string(),
+                conflict_exists: None,
+                archive_internal_root: None,
+                should_overwrite: false,
+            },
+        ];
+
+        let result = analyzer.deduplicate_by_target_path(tasks);
+
+        // Should only have one task since target paths are the same
+        assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn test_deduplicate_by_target_path_different_targets() {
+        let analyzer = Analyzer::new();
+
+        // Different target paths should be kept
+        let tasks = vec![
+            InstallTask {
+                id: "1".to_string(),
+                addon_type: AddonType::Aircraft,
+                source_path: "/downloads/A330".to_string(),
+                target_path: "/X-Plane/Aircraft/A330".to_string(),
+                display_name: "A330".to_string(),
+                conflict_exists: None,
+                archive_internal_root: None,
+                should_overwrite: false,
+            },
+            InstallTask {
+                id: "2".to_string(),
+                addon_type: AddonType::Aircraft,
+                source_path: "/downloads/B737".to_string(),
+                target_path: "/X-Plane/Aircraft/B737".to_string(),
+                display_name: "B737".to_string(),
+                conflict_exists: None,
+                archive_internal_root: None,
+                should_overwrite: false,
+            },
+        ];
+
+        let result = analyzer.deduplicate_by_target_path(tasks);
+
+        // Should have both tasks since target paths are different
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_deduplicate_multiple_xpl_same_plugin() {
+        let analyzer = Analyzer::new();
+
+        // Multiple .xpl files in same plugin folder -> same target path
+        let tasks = vec![
+            InstallTask {
+                id: "1".to_string(),
+                addon_type: AddonType::Plugin,
+                source_path: "/downloads/MyPlugin/win.xpl".to_string(),
+                target_path: "/X-Plane/Resources/plugins/MyPlugin".to_string(),
+                display_name: "MyPlugin".to_string(),
+                conflict_exists: None,
+                archive_internal_root: None,
+                should_overwrite: false,
+            },
+            InstallTask {
+                id: "2".to_string(),
+                addon_type: AddonType::Plugin,
+                source_path: "/downloads/MyPlugin/mac.xpl".to_string(),
+                target_path: "/X-Plane/Resources/plugins/MyPlugin".to_string(),
+                display_name: "MyPlugin".to_string(),
+                conflict_exists: None,
+                archive_internal_root: None,
+                should_overwrite: false,
+            },
+            InstallTask {
+                id: "3".to_string(),
+                addon_type: AddonType::Plugin,
+                source_path: "/downloads/MyPlugin/lin.xpl".to_string(),
+                target_path: "/X-Plane/Resources/plugins/MyPlugin".to_string(),
+                display_name: "MyPlugin".to_string(),
+                conflict_exists: None,
+                archive_internal_root: None,
+                should_overwrite: false,
+            },
+        ];
+
+        let result = analyzer.deduplicate_by_target_path(tasks);
+
+        // Should only have one task since all target paths are the same
+        assert_eq!(result.len(), 1);
     }
 }

@@ -1,10 +1,13 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "PascalCase")]
 pub enum AddonType {
     Aircraft,
+    /// Scenery with Earth nav data (.dsf files)
     Scenery,
+    /// Scenery library with library.txt
+    SceneryLibrary,
     Plugin,
     Navdata,
 }
@@ -20,6 +23,13 @@ pub struct InstallTask {
     pub display_name: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub conflict_exists: Option<bool>,
+    /// For archives: the root folder path inside the archive to extract from
+    /// e.g., "MyScenery" if archive contains "MyScenery/Earth nav data/..."
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub archive_internal_root: Option<String>,
+    /// Whether to overwrite existing folder (delete before install)
+    #[serde(default)]
+    pub should_overwrite: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -44,4 +54,40 @@ pub struct DetectedItem {
     pub addon_type: AddonType,
     pub path: String,
     pub display_name: String,
+    /// For archives: the root folder path inside the archive
+    pub archive_internal_root: Option<String>,
+}
+
+/// Installation progress event sent to frontend
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InstallProgress {
+    /// Overall progress percentage (0.0 - 100.0)
+    pub percentage: f64,
+    /// Total bytes to process
+    pub total_bytes: u64,
+    /// Bytes processed so far
+    pub processed_bytes: u64,
+    /// Current task index (0-based)
+    pub current_task_index: usize,
+    /// Total number of tasks
+    pub total_tasks: usize,
+    /// Display name of current task
+    pub current_task_name: String,
+    /// Current file being processed
+    pub current_file: Option<String>,
+    /// Current phase
+    pub phase: InstallPhase,
+}
+
+/// Installation phase
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum InstallPhase {
+    /// Calculating total size
+    Calculating,
+    /// Installing files
+    Installing,
+    /// Finalizing
+    Finalizing,
 }
