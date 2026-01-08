@@ -46,6 +46,13 @@ pub fn unregister_context_menu() -> Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "windows")]
+pub fn is_context_menu_registered() -> bool {
+    let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
+    // Check if the registry key exists
+    hkcr.open_subkey(r"*\shell\XFastInstall").is_ok()
+}
+
 #[cfg(not(target_os = "windows"))]
 use anyhow::Result;
 
@@ -57,4 +64,9 @@ pub fn register_context_menu() -> Result<()> {
 #[cfg(not(target_os = "windows"))]
 pub fn unregister_context_menu() -> Result<()> {
     Err(anyhow::anyhow!("Context menu unregistration is only supported on Windows"))
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn is_context_menu_registered() -> bool {
+    false
 }

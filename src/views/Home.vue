@@ -1,44 +1,44 @@
 <template>
-  <div class="home-view h-full flex flex-col items-center justify-center p-6 animate-fade-in relative overflow-hidden">
+  <div class="home-view h-full flex flex-col p-4 animate-fade-in relative overflow-hidden">
     <!-- Background Decor (Dark Mode Only for deep glow) -->
     <div class="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0 opacity-0 dark:opacity-100 transition-opacity duration-500">
       <div class="absolute top-1/4 left-1/4 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl"></div>
       <div class="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"></div>
     </div>
 
-    <div class="w-full max-w-3xl z-10 space-y-8">
-      <!-- Warning Alert -->
+    <div class="w-full max-w-3xl mx-auto z-10 flex flex-col flex-1 min-h-0 gap-3">
+      <!-- Warning Alert (Compact) -->
       <transition name="slide-down">
         <div
           v-if="!store.xplanePath"
-          class="bg-yellow-50/90 dark:bg-yellow-500/10 backdrop-blur-md border border-yellow-200 dark:border-yellow-500/20 rounded-2xl p-6 flex items-start space-x-4 shadow-lg shadow-yellow-500/5 transition-colors duration-300"
+          class="flex-shrink-0 bg-yellow-50/90 dark:bg-yellow-500/10 backdrop-blur-md border border-yellow-200 dark:border-yellow-500/20 rounded-xl p-3 flex items-center space-x-3 shadow-lg shadow-yellow-500/5 transition-colors duration-300"
         >
-          <div class="p-3 bg-yellow-100 dark:bg-yellow-500/20 rounded-xl">
-            <svg class="w-6 h-6 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div class="p-2 bg-yellow-100 dark:bg-yellow-500/20 rounded-lg flex-shrink-0">
+            <svg class="w-5 h-5 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
             </svg>
           </div>
-          <div class="flex-1">
-            <h3 class="text-lg font-semibold text-yellow-800 dark:text-yellow-100 mb-1"><AnimatedText>{{ $t('home.setPathFirst') }}</AnimatedText></h3>
-            <p class="text-yellow-700 dark:text-yellow-200/70 mb-3"><AnimatedText>{{ $t('home.pathNotSetDesc') }}</AnimatedText></p>
-            <router-link 
-              to="/settings" 
-              class="inline-flex items-center px-4 py-2 bg-yellow-200/50 dark:bg-yellow-500/20 hover:bg-yellow-200 dark:hover:bg-yellow-500/30 text-yellow-800 dark:text-yellow-200 text-sm font-medium rounded-lg transition-colors duration-200 border border-yellow-300 dark:border-yellow-500/30"
-            >
-              <AnimatedText>{{ $t('home.goToSettings') }}</AnimatedText>
-              <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path>
-              </svg>
-            </router-link>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-yellow-800 dark:text-yellow-100 truncate"><AnimatedText>{{ $t('home.setPathFirst') }}</AnimatedText></p>
+            <p class="text-xs text-yellow-700 dark:text-yellow-200/70 truncate"><AnimatedText>{{ $t('home.pathNotSetDesc') }}</AnimatedText></p>
           </div>
+          <router-link
+            to="/settings"
+            class="flex-shrink-0 inline-flex items-center px-3 py-1.5 bg-yellow-200/50 dark:bg-yellow-500/20 hover:bg-yellow-200 dark:hover:bg-yellow-500/30 text-yellow-800 dark:text-yellow-200 text-xs font-medium rounded-lg transition-colors duration-200 border border-yellow-300 dark:border-yellow-500/30"
+          >
+            <AnimatedText>{{ $t('home.goToSettings') }}</AnimatedText>
+            <svg class="w-3 h-3 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+            </svg>
+          </router-link>
         </div>
       </transition>
 
-      <!-- Main Action Area -->
-      <div class="relative group">
+      <!-- Main Action Area (Flexible Height) -->
+      <div class="relative group flex-1 min-h-0 flex flex-col">
         <!-- Drop Zone -->
         <div
-          class="drop-zone-card relative overflow-hidden bg-white/60 dark:bg-gray-800/40 backdrop-blur-xl border-2 border-dashed border-gray-300 dark:border-gray-600/50 rounded-3xl p-12 text-center transition-all duration-500 group-hover:border-blue-400 dark:group-hover:border-blue-500/50 group-hover:bg-white/80 dark:group-hover:bg-gray-800/60 shadow-sm dark:shadow-none"
+          class="drop-zone-card flex-1 relative overflow-hidden bg-white/60 dark:bg-gray-800/40 backdrop-blur-xl border-2 border-dashed border-gray-300 dark:border-gray-600/50 rounded-2xl p-6 text-center transition-all duration-500 group-hover:border-blue-400 dark:group-hover:border-blue-500/50 group-hover:bg-white/80 dark:group-hover:bg-gray-800/60 shadow-sm dark:shadow-none flex flex-col items-center justify-center"
           :class="{ 
             'drag-over ring-4 ring-blue-500/20 border-blue-500 scale-[1.02]': isDragging, 
             'animate-pulse border-blue-400': store.isAnalyzing, 
@@ -48,15 +48,15 @@
           <!-- Hover Gradient -->
           <div class="absolute inset-0 bg-gradient-to-br from-blue-50/50 to-purple-50/50 dark:from-blue-600/5 dark:to-purple-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
 
-          <div class="relative z-10 flex flex-col items-center justify-center space-y-6">
+          <div class="relative z-10 flex flex-col items-center justify-center space-y-4">
             <!-- Icon -->
-            <div class="w-24 h-24 rounded-full bg-blue-50 dark:bg-gray-700/50 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform duration-500 relative">
+            <div class="w-16 h-16 rounded-full bg-blue-50 dark:bg-gray-700/50 flex items-center justify-center group-hover:scale-110 transition-transform duration-500 relative">
               <div class="absolute inset-0 bg-blue-500/20 rounded-full blur-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-              <svg 
-                class="w-10 h-10 text-gray-400 dark:text-gray-400 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors duration-300" 
-                :class="{ 'text-blue-500 dark:text-blue-400 animate-bounce': isDragging }" 
-                fill="none" 
-                stroke="currentColor" 
+              <svg
+                class="w-8 h-8 text-gray-400 dark:text-gray-400 group-hover:text-blue-500 dark:group-hover:text-blue-400 transition-colors duration-300"
+                :class="{ 'text-blue-500 dark:text-blue-400 animate-bounce': isDragging }"
+                fill="none"
+                stroke="currentColor"
                 viewBox="0 0 24 24"
               >
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
@@ -64,31 +64,31 @@
             </div>
 
             <!-- Text -->
-            <div class="space-y-2">
-              <h2 class="text-3xl font-bold text-gray-900 dark:text-white tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-100 transition-colors">
+            <div class="space-y-1 text-center">
+              <h2 class="text-2xl font-bold text-gray-900 dark:text-white tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-100 transition-colors">
                 <AnimatedText>{{ $t('home.dropFilesHere') }}</AnimatedText>
               </h2>
-              <p class="text-gray-500 dark:text-gray-400 max-w-md mx-auto text-lg">
+              <p class="text-gray-500 dark:text-gray-400 max-w-md mx-auto text-sm">
                 <AnimatedText>{{ $t('home.supportedFormats') }}</AnimatedText>
               </p>
             </div>
 
             <!-- Features Badges -->
-            <div class="flex flex-wrap justify-center gap-3 pt-6">
-              <span class="px-3 py-1.5 rounded-full bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-white/5 text-gray-600 dark:text-gray-300 text-sm font-medium flex items-center space-x-2 shadow-sm dark:shadow-none">
-                <svg class="w-4 h-4 text-blue-500 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="flex flex-wrap justify-center gap-2 pt-2">
+              <span class="px-2.5 py-1 rounded-full bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-white/5 text-gray-600 dark:text-gray-300 text-xs font-medium flex items-center space-x-1.5 shadow-sm dark:shadow-none">
+                <svg class="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                 </svg>
                 <span><AnimatedText>{{ $t('home.autoDetect') }}</AnimatedText></span>
               </span>
-              <span class="px-3 py-1.5 rounded-full bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-white/5 text-gray-600 dark:text-gray-300 text-sm font-medium flex items-center space-x-2 shadow-sm dark:shadow-none">
-                <svg class="w-4 h-4 text-purple-500 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <span class="px-2.5 py-1 rounded-full bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-white/5 text-gray-600 dark:text-gray-300 text-xs font-medium flex items-center space-x-1.5 shadow-sm dark:shadow-none">
+                <svg class="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
                 </svg>
                 <span><AnimatedText>{{ $t('home.fastInstall') }}</AnimatedText></span>
               </span>
-              <span class="px-3 py-1.5 rounded-full bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-white/5 text-gray-600 dark:text-gray-300 text-sm font-medium flex items-center space-x-2 shadow-sm dark:shadow-none">
-                <svg class="w-4 h-4 text-emerald-500 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <span class="px-2.5 py-1 rounded-full bg-white dark:bg-gray-700/50 border border-gray-200 dark:border-white/5 text-gray-600 dark:text-gray-300 text-xs font-medium flex items-center space-x-1.5 shadow-sm dark:shadow-none">
+                <svg class="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
                 </svg>
                 <span><AnimatedText>{{ $t('home.batchProcess') }}</AnimatedText></span>
@@ -99,8 +99,8 @@
 
         <!-- Progress Overlays -->
         <transition name="fade">
-          <div v-if="store.isAnalyzing || store.isInstalling" class="absolute inset-0 z-20 bg-white/90 dark:bg-gray-900/80 backdrop-blur-md rounded-3xl flex items-center justify-center p-8 transition-colors duration-300">
-            <div class="w-full max-w-md space-y-6 text-center">
+          <div v-if="store.isAnalyzing || store.isInstalling" class="absolute inset-0 z-20 bg-white/90 dark:bg-gray-900/80 backdrop-blur-md rounded-2xl flex items-center justify-center p-6 transition-colors duration-300">
+            <div class="w-full max-w-md space-y-4 text-center">
               
               <!-- Analyzing State -->
               <div v-if="store.isAnalyzing" class="space-y-4">
@@ -169,6 +169,12 @@
       </div>
 
       <ConfirmationModal v-if="showConfirmation" @close="showConfirmation = false" @confirm="handleInstall" />
+      <PasswordModal
+        v-if="showPasswordModal"
+        :archive-paths="passwordRequiredPaths"
+        @confirm="handlePasswordSubmit"
+        @cancel="handlePasswordCancel"
+      />
     </div>
   </div>
 </template>
@@ -185,8 +191,10 @@ import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow'
 import { listen } from '@tauri-apps/api/event'
 import type { UnlistenFn } from '@tauri-apps/api/event'
 import ConfirmationModal from '@/components/ConfirmationModal.vue'
+import PasswordModal from '@/components/PasswordModal.vue'
 import AnimatedText from '@/components/AnimatedText.vue'
 import type { AnalysisResult, InstallProgress } from '@/types'
+import { logOperation, logError } from '@/services/logger'
 
 const { t } = useI18n()
 
@@ -198,9 +206,16 @@ const isDragging = ref(false)
 const showConfirmation = ref(false)
 const debugDropFlash = ref(false)
 
+// Password modal state
+const showPasswordModal = ref(false)
+const passwordRequiredPaths = ref<string[]>([])
+const pendingAnalysisPaths = ref<string[]>([])
+const collectedPasswords = ref<Record<string, string>>({})
+
 // Tauri drag-drop event unsubscribe function
 let unlistenDragDrop: UnlistenFn | null = null
 let unlistenProgress: UnlistenFn | null = null
+let unlistenCliArgs: UnlistenFn | null = null
 
 // Global listeners for drag/drop visual feedback
 function onWindowDragOver(e: DragEvent) {
@@ -266,21 +281,26 @@ onMounted(async () => {
     console.error('Failed to setup progress listener:', error)
   }
 
-  // Listen for CLI args event
-  const handleCliArgs = async (event: CustomEvent<string[]>) => {
-    const paths = event.detail
-    if (paths && paths.length > 0) {
-      console.log('Processing CLI args:', paths)
-      await analyzeFiles(paths)
-    }
+  // Listen for CLI args events (when app receives new files while running)
+  try {
+    unlistenCliArgs = await listen<string[]>('cli-args', async (event) => {
+      if (event.payload && event.payload.length > 0) {
+        console.log('CLI args event in Home.vue:', event.payload)
+        await analyzeFiles(event.payload)
+      }
+    })
+    console.log('CLI args listener registered in Home.vue')
+  } catch (error) {
+    console.error('Failed to setup CLI args listener:', error)
   }
 
-  window.addEventListener('cli-args-received', handleCliArgs as EventListener)
-
-  // Store cleanup function
-  onBeforeUnmount(() => {
-    window.removeEventListener('cli-args-received', handleCliArgs as EventListener)
-  })
+  // Check for pending CLI args (from context menu launch)
+  if (store.pendingCliArgs && store.pendingCliArgs.length > 0) {
+    console.log('Processing pending CLI args:', store.pendingCliArgs)
+    const args = [...store.pendingCliArgs]
+    store.clearPendingCliArgs()
+    await analyzeFiles(args)
+  }
 })
 
 onBeforeUnmount(() => {
@@ -295,9 +315,12 @@ onBeforeUnmount(() => {
   if (unlistenProgress) {
     unlistenProgress()
   }
+  if (unlistenCliArgs) {
+    unlistenCliArgs()
+  }
 })
 
-async function analyzeFiles(paths: string[]) {
+async function analyzeFiles(paths: string[], passwords?: Record<string, string>) {
   if (!store.xplanePath) {
     console.log('No X-Plane path set')
     toast.warning(t('home.pathNotSet'))
@@ -305,16 +328,33 @@ async function analyzeFiles(paths: string[]) {
   }
 
   store.isAnalyzing = true
+  // Non-blocking log call (don't await to improve startup speed)
+  logOperation(t('log.filesDropped'), t('log.fileCount', { count: paths.length }))
 
   try {
     console.log('Paths to analyze:', paths)
 
     const result = await invoke<AnalysisResult>('analyze_addons', {
       paths,
-      xplanePath: store.xplanePath
+      xplanePath: store.xplanePath,
+      passwords: passwords || null
     })
 
     console.log('Analysis result:', result)
+
+    // Check if any archives require passwords
+    if (result.passwordRequired && result.passwordRequired.length > 0) {
+      // Store the original paths for re-analysis after password input
+      pendingAnalysisPaths.value = paths
+      passwordRequiredPaths.value = result.passwordRequired
+      // Preserve already collected passwords
+      if (passwords) {
+        collectedPasswords.value = { ...passwords }
+      }
+      showPasswordModal.value = true
+      store.isAnalyzing = false
+      return
+    }
 
     if (result.errors.length > 0) {
       // Show errors as a modal popup; keep other notifications as toasts
@@ -333,6 +373,8 @@ async function analyzeFiles(paths: string[]) {
       if (allowedTasks.length > 0) {
         store.setCurrentTasks(allowedTasks)
         showConfirmation.value = true
+        // Non-blocking log call
+        logOperation(t('log.analysisCompleted'), t('log.taskCount', { count: allowedTasks.length }))
       } else if (ignoredCount > 0) {
         toast.warning(t('home.allIgnored'))
       } else {
@@ -343,25 +385,50 @@ async function analyzeFiles(paths: string[]) {
     }
   } catch (error) {
     console.error('Analysis failed:', error)
+    // Non-blocking log call
+    logError(`${t('log.analysisFailed')}: ${error}`, 'analysis')
     modal.showError(t('home.failedToAnalyze') + ': ' + String(error))
   } finally {
     store.isAnalyzing = false
   }
 }
 
+// Handle password modal submit
+async function handlePasswordSubmit(passwords: Record<string, string>) {
+  showPasswordModal.value = false
+  // Merge new passwords with previously collected ones
+  const allPasswords = { ...collectedPasswords.value, ...passwords }
+  // Re-analyze with passwords
+  await analyzeFiles(pendingAnalysisPaths.value, allPasswords)
+}
+
+// Handle password modal cancel
+function handlePasswordCancel() {
+  showPasswordModal.value = false
+  pendingAnalysisPaths.value = []
+  passwordRequiredPaths.value = []
+  collectedPasswords.value = {}
+}
+
 async function handleInstall() {
   showConfirmation.value = false
   store.isInstalling = true
+  // Non-blocking log call
+  logOperation(t('log.installationStarted'), t('log.taskCount', { count: store.currentTasks.length }))
 
   try {
     // Use getTasksWithOverwrite() to include overwrite settings
     await invoke('install_addons', {
       tasks: store.getTasksWithOverwrite()
     })
+    // Non-blocking log call
+    logOperation(t('log.installationCompleted'))
     toast.success(t('home.installationCompleted'))
     store.clearTasks()
   } catch (error) {
     console.error('Installation failed:', error)
+    // Non-blocking log call
+    logError(`${t('log.installationFailed')}: ${error}`, 'installation')
     modal.showError(t('home.installationFailed') + ': ' + String(error))
   } finally {
     store.isInstalling = false

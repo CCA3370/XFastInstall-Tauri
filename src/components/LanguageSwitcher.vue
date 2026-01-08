@@ -15,13 +15,15 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { setLocale } from '@/i18n'
 
 const { locale } = useI18n()
 
 const currentLanguage = computed(() => locale.value)
 
 const toggleLanguage = () => {
-  locale.value = locale.value === 'zh' ? 'en' : 'zh'
+  const newLocale = locale.value === 'zh' ? 'en' : 'zh'
+  setLocale(newLocale)
 }
 </script>
 

@@ -19,11 +19,15 @@ export interface InstallTask {
   archiveInternalRoot?: string;
   /** Whether to overwrite existing folder (delete before install) */
   shouldOverwrite?: boolean;
+  /** Password for encrypted archives */
+  password?: string;
 }
 
 export interface AnalysisResult {
   tasks: InstallTask[];
   errors: string[];
+  /** List of archive paths that require a password */
+  passwordRequired: string[];
 }
 
 export interface NavdataInfo {

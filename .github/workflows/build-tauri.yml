@@ -47,5 +47,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: XFastInstall-windows-portable
-          path: '**/target/release/xfastinstall.exe'
+          path: '**/xfastinstall.exe'
           if-no-files-found: error

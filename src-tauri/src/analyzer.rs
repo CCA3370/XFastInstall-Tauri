@@ -1,8 +1,11 @@
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
+use rayon::prelude::*;
 
+use crate::logger;
+use crate::logger::{tr, LogMsg};
 use crate::models::{AddonType, AnalysisResult, DetectedItem, InstallTask};
-use crate::scanner::Scanner;
+use crate::scanner::{Scanner, PasswordRequiredError};
 
 pub struct Analyzer {
     scanner: Scanner,
@@ -17,16 +20,42 @@ impl Analyzer {
 
     /// Analyze a list of paths and return installation tasks
     pub fn analyze(&self, paths: Vec<String>, xplane_path: &str) -> AnalysisResult {
+        logger::log_info(
+            &format!("{}: {} path(s)", tr(LogMsg::AnalysisStarted), paths.len()),
+            Some("analyzer"),
+        );
+
+        // Parallel scan all paths using rayon for better performance
+        let results: Vec<_> = paths
+            .par_iter()
+            .map(|path_str| {
+                let path = Path::new(path_str);
+                (path_str.clone(), self.scanner.scan_path(path))
+            })
+            .collect();
+
+        // Merge results
         let mut all_detected = Vec::new();
         let mut errors = Vec::new();
+        let mut password_required = Vec::new();
 
-        // Scan all paths
-        for path_str in paths {
-            let path = Path::new(&path_str);
-
-            match self.scanner.scan_path(path) {
+        for (path_str, result) in results {
+            match result {
                 Ok(detected) => all_detected.extend(detected),
-                Err(e) => errors.push(format!("Failed to scan {}: {}", path_str, e)),
+                Err(e) => {
+                    // Check if this is a password-required error
+                    if let Some(pwd_err) = e.downcast_ref::<PasswordRequiredError>() {
+                        logger::log_info(
+                            &format!("Password required for: {}", pwd_err.archive_path),
+                            Some("analyzer"),
+                        );
+                        password_required.push(pwd_err.archive_path.clone());
+                    } else {
+                        let error_msg = format!("{} {}: {}", tr(LogMsg::ScanFailed), path_str, e);
+                        logger::log_error(&error_msg, Some("analyzer"));
+                        errors.push(error_msg);
+                    }
+                }
             }
         }
 
@@ -42,7 +71,12 @@ impl Analyzer {
         // Deduplicate tasks by target path (e.g., multiple .acf files in same aircraft folder)
         let tasks = self.deduplicate_by_target_path(tasks);
 
-        AnalysisResult { tasks, errors }
+        logger::log_info(
+            &format!("{}: {} task(s)", tr(LogMsg::AnalysisCompleted), tasks.len()),
+            Some("analyzer"),
+        );
+
+        AnalysisResult { tasks, errors, password_required }
     }
 
     /// Deduplicate install tasks based on target_path
@@ -197,6 +231,7 @@ impl Analyzer {
             conflict_exists: if conflict_exists { Some(true) } else { None },
             archive_internal_root: item.archive_internal_root,
             should_overwrite: false, // Default to false, controlled by frontend
+            password: None, // Will be set by frontend if needed
         }
     }
 }
@@ -338,6 +373,7 @@ mod tests {
                 conflict_exists: None,
                 archive_internal_root: None,
                 should_overwrite: false,
+                password: None,
             },
             InstallTask {
                 id: "2".to_string(),
@@ -348,6 +384,7 @@ mod tests {
                 conflict_exists: None,
                 archive_internal_root: None,
                 should_overwrite: false,
+                password: None,
             },
         ];
 
@@ -372,6 +409,7 @@ mod tests {
                 conflict_exists: None,
                 archive_internal_root: None,
                 should_overwrite: false,
+                password: None,
             },
             InstallTask {
                 id: "2".to_string(),
@@ -382,6 +420,7 @@ mod tests {
                 conflict_exists: None,
                 archive_internal_root: None,
                 should_overwrite: false,
+                password: None,
             },
         ];
 
@@ -406,6 +445,7 @@ mod tests {
                 conflict_exists: None,
                 archive_internal_root: None,
                 should_overwrite: false,
+                password: None,
             },
             InstallTask {
                 id: "2".to_string(),
@@ -416,6 +456,7 @@ mod tests {
                 conflict_exists: None,
                 archive_internal_root: None,
                 should_overwrite: false,
+                password: None,
             },
             InstallTask {
                 id: "3".to_string(),
@@ -426,6 +467,7 @@ mod tests {
                 conflict_exists: None,
                 archive_internal_root: None,
                 should_overwrite: false,
+                password: None,
             },
         ];
 

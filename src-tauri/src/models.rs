@@ -30,6 +30,9 @@ pub struct InstallTask {
     /// Whether to overwrite existing folder (delete before install)
     #[serde(default)]
     pub should_overwrite: bool,
+    /// Password for encrypted archives
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -37,6 +40,9 @@ pub struct InstallTask {
 pub struct AnalysisResult {
     pub tasks: Vec<InstallTask>,
     pub errors: Vec<String>,
+    /// List of archive paths that require a password
+    #[serde(default)]
+    pub password_required: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]

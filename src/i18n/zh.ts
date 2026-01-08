@@ -74,7 +74,13 @@ export default {
     about: '关于',
     version: '版本',
     saved: '已保存',
-    saving: '保存中...'
+    saving: '保存中...',
+    logs: '应用日志',
+    noLogs: '暂无日志',
+    refreshLogs: '刷新',
+    openLogFolder: '打开文件夹',
+    copyLogs: '复制',
+    logsCopied: '日志已复制到剪贴板'
   },
   modal: {
     confirmInstallation: '确认安装',
@@ -88,7 +94,31 @@ export default {
     overwriteNote: '安装前将删除现有文件夹',
     overwriteAircraftNote: '将保留涂装和偏好设置文件'
   },
+  password: {
+    title: '需要密码',
+    subtitle: '以下压缩包需要输入密码才能解压',
+    placeholder: '输入密码',
+    unlock: '解锁并继续',
+    wrongPassword: '密码错误，请重试'
+  },
   toast: {
     pathRequired: '请先在设置中配置X-Plane路径'
+  },
+  log: {
+    appStarted: 'XFastInstall 已启动',
+    launchedWithArgs: '通过参数启动',
+    filesDropped: '文件拖入待分析',
+    fileCount: '{count} 个文件',
+    analysisStarted: '开始分析',
+    pathCount: '{count} 个路径',
+    analysisCompleted: '分析完成',
+    taskCount: '{count} 个任务就绪',
+    analysisFailed: '分析失败',
+    installationStarted: '开始安装',
+    installationCompleted: '安装成功完成',
+    installationFailed: '安装失败',
+    installing: '正在安装',
+    failedToInstall: '安装失败',
+    scanFailed: '扫描失败'
   }
 }

@@ -74,7 +74,13 @@ export default {
     about: 'About',
     version: 'Version',
     saved: 'Saved',
-    saving: 'Saving...'
+    saving: 'Saving...',
+    logs: 'Application Logs',
+    noLogs: 'No logs available',
+    refreshLogs: 'Refresh',
+    openLogFolder: 'Open Folder',
+    copyLogs: 'Copy',
+    logsCopied: 'Logs copied to clipboard'
   },
   modal: {
     confirmInstallation: 'Confirm Installation',
@@ -88,7 +94,31 @@ export default {
     overwriteNote: 'Will delete existing folder before installing',
     overwriteAircraftNote: 'Will preserve liveries and preference files'
   },
+  password: {
+    title: 'Password Required',
+    subtitle: 'The following archives require a password to extract',
+    placeholder: 'Enter password',
+    unlock: 'Unlock and Continue',
+    wrongPassword: 'Wrong password, please try again'
+  },
   toast: {
     pathRequired: 'Please set X-Plane path in Settings first'
+  },
+  log: {
+    appStarted: 'XFastInstall started',
+    launchedWithArgs: 'Launched with arguments',
+    filesDropped: 'Files dropped for analysis',
+    fileCount: '{count} file(s)',
+    analysisStarted: 'Analysis started',
+    pathCount: '{count} path(s)',
+    analysisCompleted: 'Analysis completed',
+    taskCount: '{count} task(s) ready',
+    analysisFailed: 'Analysis failed',
+    installationStarted: 'Installation started',
+    installationCompleted: 'Installation completed successfully',
+    installationFailed: 'Installation failed',
+    installing: 'Installing',
+    failedToInstall: 'Failed to install',
+    scanFailed: 'Failed to scan'
   }
 }

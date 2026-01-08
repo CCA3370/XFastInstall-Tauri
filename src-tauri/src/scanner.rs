@@ -5,6 +5,20 @@ use walkdir::WalkDir;
 
 use crate::models::{AddonType, DetectedItem, NavdataCycle};
 
+/// Error indicating that password is required for an encrypted archive
+#[derive(Debug)]
+pub struct PasswordRequiredError {
+    pub archive_path: String,
+}
+
+impl std::fmt::Display for PasswordRequiredError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Password required for archive: {}", self.archive_path)
+    }
+}
+
+impl std::error::Error for PasswordRequiredError {}
+
 /// Scans a directory or archive and detects addon types based on markers
 pub struct Scanner;
 
@@ -58,19 +72,187 @@ impl Scanner {
 
     /// Scan archive without full extraction
     fn scan_archive(&self, archive_path: &Path) -> Result<Vec<DetectedItem>> {
-        let mut detected = Vec::new();
-        let extension = archive_path.extension().and_then(|s| s.to_str()).unwrap_or("");
+        let extension = archive_path.extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_lowercase();
 
-        match extension {
-            "zip" => detected.extend(self.scan_zip(archive_path)?),
+        match extension.as_str() {
+            "zip" => self.scan_zip(archive_path),
+            "7z" => self.scan_7z(archive_path),
+            "rar" => self.scan_rar(archive_path),
             _ => {
-                // For other formats (7z, rar), we'll need to extract to temp
-                // For now, return empty
-                eprintln!("Archive format {} not yet fully supported", extension);
+                eprintln!("Archive format {} not supported", extension);
+                Ok(vec![])
+            }
+        }
+    }
+
+    /// Scan a 7z archive without extraction
+    fn scan_7z(&self, archive_path: &Path) -> Result<Vec<DetectedItem>> {
+        let archive = sevenz_rust2::Archive::open(archive_path)
+            .map_err(|e| {
+                let err_str = format!("{:?}", e);
+                // Check for password-related errors
+                if err_str.contains("password") || err_str.contains("Password") || err_str.contains("encrypted") {
+                    anyhow::anyhow!(PasswordRequiredError {
+                        archive_path: archive_path.to_string_lossy().to_string(),
+                    })
+                } else {
+                    anyhow::anyhow!("Failed to open 7z archive: {}", e)
+                }
+            })?;
+
+        let mut detected = Vec::new();
+
+        // Collect all file paths from the archive
+        let files: Vec<String> = archive.files
+            .iter()
+            .map(|entry| entry.name().to_string())
+            .collect();
+
+        // Process files using the same logic as ZIP
+        for file_path in &files {
+            if file_path.ends_with(".acf") {
+                if let Some(item) = self.detect_aircraft_in_archive(file_path, archive_path)? {
+                    detected.push(item);
+                }
+            } else if file_path.ends_with("library.txt") {
+                if let Some(item) = self.detect_scenery_library(file_path, archive_path)? {
+                    detected.push(item);
+                }
+            } else if file_path.ends_with(".dsf") {
+                if let Some(item) = self.detect_scenery_dsf(file_path, archive_path)? {
+                    detected.push(item);
+                }
+            } else if file_path.ends_with(".xpl") {
+                if let Some(item) = self.detect_plugin_in_archive(file_path, archive_path)? {
+                    detected.push(item);
+                }
+            } else if file_path.ends_with("cycle.json") {
+                // For 7z, we need to extract this single file to read its content
+                if let Ok(content) = self.read_file_from_7z(archive_path, file_path) {
+                    if let Some(item) = self.detect_navdata_in_archive(file_path, &content, archive_path)? {
+                        detected.push(item);
+                    }
+                }
             }
         }
 
         Ok(detected)
+    }
+
+    /// Read a single file content from a 7z archive
+    fn read_file_from_7z(&self, archive_path: &Path, file_path: &str) -> Result<String> {
+        // Create temp directory
+        let temp_dir = std::env::temp_dir().join(format!("xfi_7z_read_{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&temp_dir)?;
+
+        // Extract to temp
+        sevenz_rust2::decompress_file(archive_path, &temp_dir)
+            .map_err(|e| anyhow::anyhow!("Failed to extract 7z: {}", e))?;
+
+        // Read the target file
+        let target_file = temp_dir.join(file_path);
+        let content = fs::read_to_string(&target_file)
+            .context("Failed to read file from 7z")?;
+
+        // Cleanup
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        Ok(content)
+    }
+
+    /// Scan a RAR archive without extraction
+    fn scan_rar(&self, archive_path: &Path) -> Result<Vec<DetectedItem>> {
+        let archive = unrar::Archive::new(archive_path)
+            .open_for_listing()
+            .map_err(|e| {
+                let err_str = format!("{:?}", e);
+                // Check for password-related errors
+                if err_str.contains("password") || err_str.contains("Password")
+                    || err_str.contains("encrypted") || err_str.contains("ERAR_MISSING_PASSWORD") {
+                    anyhow::anyhow!(PasswordRequiredError {
+                        archive_path: archive_path.to_string_lossy().to_string(),
+                    })
+                } else {
+                    anyhow::anyhow!("Failed to open RAR archive: {:?}", e)
+                }
+            })?;
+
+        let mut detected = Vec::new();
+        let mut files: Vec<String> = Vec::new();
+
+        // Collect all file paths
+        for entry in archive {
+            if let Ok(e) = entry {
+                files.push(e.filename.to_string_lossy().to_string());
+            }
+        }
+
+        // Process files using the same logic as ZIP
+        for file_path in &files {
+            if file_path.ends_with(".acf") {
+                if let Some(item) = self.detect_aircraft_in_archive(file_path, archive_path)? {
+                    detected.push(item);
+                }
+            } else if file_path.ends_with("library.txt") {
+                if let Some(item) = self.detect_scenery_library(file_path, archive_path)? {
+                    detected.push(item);
+                }
+            } else if file_path.ends_with(".dsf") {
+                if let Some(item) = self.detect_scenery_dsf(file_path, archive_path)? {
+                    detected.push(item);
+                }
+            } else if file_path.ends_with(".xpl") {
+                if let Some(item) = self.detect_plugin_in_archive(file_path, archive_path)? {
+                    detected.push(item);
+                }
+            } else if file_path.ends_with("cycle.json") {
+                // For RAR, we need to extract this single file to read its content
+                if let Ok(content) = self.read_file_from_rar(archive_path, file_path) {
+                    if let Some(item) = self.detect_navdata_in_archive(file_path, &content, archive_path)? {
+                        detected.push(item);
+                    }
+                }
+            }
+        }
+
+        Ok(detected)
+    }
+
+    /// Read a single file content from a RAR archive
+    fn read_file_from_rar(&self, archive_path: &Path, target_file: &str) -> Result<String> {
+        // Create temp directory
+        let temp_dir = std::env::temp_dir().join(format!("xfi_rar_read_{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&temp_dir)?;
+
+        // Extract to temp using the typestate pattern
+        let mut archive = unrar::Archive::new(archive_path)
+            .open_for_processing()
+            .map_err(|e| anyhow::anyhow!("Failed to open RAR for processing: {:?}", e))?;
+
+        while let Some(header) = archive.read_header()
+            .map_err(|e| anyhow::anyhow!("Failed to read RAR header: {:?}", e))?
+        {
+            archive = if header.entry().is_file() {
+                header.extract_with_base(&temp_dir)
+                    .map_err(|e| anyhow::anyhow!("Failed to extract RAR entry: {:?}", e))?
+            } else {
+                header.skip()
+                    .map_err(|e| anyhow::anyhow!("Failed to skip RAR entry: {:?}", e))?
+            };
+        }
+
+        // Read the target file
+        let file_path = temp_dir.join(target_file);
+        let content = fs::read_to_string(&file_path)
+            .context("Failed to read file from RAR")?;
+
+        // Cleanup
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        Ok(content)
     }
 
     /// Scan a ZIP archive

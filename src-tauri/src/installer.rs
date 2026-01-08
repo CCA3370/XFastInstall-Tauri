@@ -6,6 +6,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::{AppHandle, Emitter};
 
+use crate::logger;
+use crate::logger::{tr, LogMsg};
 use crate::models::{AddonType, InstallPhase, InstallProgress, InstallTask};
 
 /// Directory statistics for backup verification
@@ -123,6 +125,11 @@ impl Installer {
 
     /// Install a list of tasks with progress reporting
     pub fn install(&self, tasks: Vec<InstallTask>) -> Result<()> {
+        logger::log_info(
+            &format!("{}: {} task(s)", tr(LogMsg::InstallationStarted), tasks.len()),
+            Some("installer"),
+        );
+
         let mut ctx = ProgressContext::new(self.app_handle.clone(), tasks.len());
 
         // Phase 1: Calculate total size
@@ -136,11 +143,23 @@ impl Installer {
             ctx.current_task_name = task.display_name.clone();
             ctx.emit_progress(None, InstallPhase::Installing);
 
-            self.install_task_with_progress(task, &ctx)?;
+            logger::log_info(
+                &format!("{}: {} -> {}", tr(LogMsg::Installing), task.display_name, task.target_path),
+                Some("installer"),
+            );
+
+            if let Err(e) = self.install_task_with_progress(task, &ctx) {
+                logger::log_error(
+                    &format!("{} {}: {}", tr(LogMsg::InstallationFailed), task.display_name, e),
+                    Some("installer"),
+                );
+                return Err(e);
+            }
         }
 
         // Phase 3: Finalize
         ctx.emit_final(InstallPhase::Finalizing);
+        logger::log_info(&tr(LogMsg::InstallationCompleted), Some("installer"));
         Ok(())
     }
 
@@ -176,6 +195,7 @@ impl Installer {
         match ext {
             Some("zip") => self.get_zip_size(archive, internal_root),
             Some("7z") => self.get_7z_size(archive),
+            Some("rar") => self.get_rar_size(archive),
             _ => Ok(0),
         }
     }
@@ -207,6 +227,21 @@ impl Installer {
         // sevenz-rust2 doesn't have easy size query, use compressed size * 3 as estimate
         let meta = fs::metadata(archive)?;
         Ok(meta.len() * 3)
+    }
+
+    /// Get uncompressed size of RAR archive
+    fn get_rar_size(&self, archive: &Path) -> Result<u64> {
+        let arch = unrar::Archive::new(archive)
+            .open_for_listing()
+            .map_err(|e| anyhow::anyhow!("Failed to open RAR for size query: {:?}", e))?;
+
+        let mut total = 0u64;
+        for entry in arch {
+            if let Ok(e) = entry {
+                total += e.unpacked_size;
+            }
+        }
+        Ok(total)
     }
 
     /// Install a single task with progress tracking
@@ -629,6 +664,7 @@ impl Installer {
         match extension {
             "zip" => self.extract_zip_with_progress(archive, target, internal_root, ctx)?,
             "7z" => self.extract_7z_with_progress(archive, target, internal_root, ctx)?,
+            "rar" => self.extract_rar_with_progress(archive, target, internal_root, ctx)?,
             _ => return Err(anyhow::anyhow!("Unsupported archive format: {}", extension)),
         }
 
@@ -728,6 +764,58 @@ impl Installer {
 
         sevenz_rust2::decompress_file(archive, &temp_dir)
             .map_err(|e| anyhow::anyhow!("Failed to extract 7z: {}", e))?;
+
+        // Determine source path (with or without internal_root)
+        let source_path = if let Some(internal_root) = internal_root {
+            let internal_root_normalized = internal_root.replace('\\', "/");
+            let path = temp_dir.join(&internal_root_normalized);
+            if path.exists() && path.is_dir() {
+                path
+            } else {
+                temp_dir.clone()
+            }
+        } else {
+            temp_dir.clone()
+        };
+
+        // Copy with progress tracking
+        self.copy_directory_with_progress(&source_path, target, ctx)?;
+
+        // Cleanup
+        let _ = fs::remove_dir_all(&temp_dir);
+
+        Ok(())
+    }
+
+    /// Extract RAR archive with progress tracking
+    /// Similar to 7z - extract to temp then copy with progress
+    fn extract_rar_with_progress(
+        &self,
+        archive: &Path,
+        target: &Path,
+        internal_root: Option<&str>,
+        ctx: &ProgressContext,
+    ) -> Result<()> {
+        // Extract to temp directory first
+        let temp_dir = std::env::temp_dir().join(format!("xfastinstall_rar_{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&temp_dir)?;
+
+        // Extract using the typestate pattern
+        let mut arch = unrar::Archive::new(archive)
+            .open_for_processing()
+            .map_err(|e| anyhow::anyhow!("Failed to open RAR for extraction: {:?}", e))?;
+
+        while let Some(header) = arch.read_header()
+            .map_err(|e| anyhow::anyhow!("Failed to read RAR header: {:?}", e))?
+        {
+            arch = if header.entry().is_file() {
+                header.extract_with_base(&temp_dir)
+                    .map_err(|e| anyhow::anyhow!("Failed to extract RAR entry: {:?}", e))?
+            } else {
+                header.skip()
+                    .map_err(|e| anyhow::anyhow!("Failed to skip RAR entry: {:?}", e))?
+            };
+        }
 
         // Determine source path (with or without internal_root)
         let source_path = if let Some(internal_root) = internal_root {

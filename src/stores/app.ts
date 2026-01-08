@@ -8,6 +8,9 @@ export const useAppStore = defineStore('app', () => {
   const isAnalyzing = ref(false)
   const isInstalling = ref(false)
 
+  // Pending CLI arguments to be processed by Home.vue
+  const pendingCliArgs = ref<string[] | null>(null)
+
   // Default: all enabled
   const installPreferences = ref<Record<AddonType, boolean>>({
     [AddonType.Aircraft]: true,
@@ -94,6 +97,16 @@ export const useAppStore = defineStore('app', () => {
     }))
   }
 
+  // Set pending CLI args for Home.vue to process
+  function setPendingCliArgs(args: string[]) {
+    pendingCliArgs.value = args
+  }
+
+  // Clear pending CLI args after processing
+  function clearPendingCliArgs() {
+    pendingCliArgs.value = null
+  }
+
   return {
     xplanePath,
     currentTasks,
@@ -102,6 +115,7 @@ export const useAppStore = defineStore('app', () => {
     installPreferences,
     overwriteSettings,
     hasConflicts,
+    pendingCliArgs,
     setXplanePath,
     loadXplanePath,
     togglePreference,
@@ -111,5 +125,7 @@ export const useAppStore = defineStore('app', () => {
     setGlobalOverwrite,
     getTaskOverwrite,
     getTasksWithOverwrite,
+    setPendingCliArgs,
+    clearPendingCliArgs,
   }
 })

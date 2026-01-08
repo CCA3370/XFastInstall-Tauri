@@ -72,7 +72,7 @@
     </nav>
 
     <!-- Main Content -->
-    <main :class="['main-content', 'pt-16', 'flex-1', 'min-h-0', 'overflow-hidden', { 'no-scrollbar': $route.path === '/settings', 'hide-scrollbar': $route.path === '/' }]">
+    <main :class="['main-content', 'pt-16', 'flex-1', 'min-h-0', 'overflow-hidden', { 'hide-scrollbar': $route.path === '/' }]">
       <div class="h-full overflow-y-auto">
         <router-view v-slot="{ Component }">
           <transition name="page" mode="out-in">
@@ -92,8 +92,8 @@
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
-import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
+import { syncLocaleToBackend } from '@/i18n'
 import ToastNotification from '@/components/ToastNotification.vue'
 import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
@@ -106,27 +106,17 @@ const router = useRouter()
 onMounted(async () => {
   store.loadXplanePath()
 
-  // Check if launched with CLI arguments
-  try {
-    const args = await invoke<string[]>('get_cli_args')
-    if (args && args.length > 0) {
-      console.log('Launched with arguments:', args)
-      // Navigate to home and emit event for processing
-      await router.push('/')
-      // Emit custom event that Home.vue will listen to
-      window.dispatchEvent(new CustomEvent('cli-args-received', { detail: args }))
-    }
-  } catch (error) {
-    console.error('Failed to get CLI args:', error)
-  }
+  // Non-blocking sync locale to backend (moved from i18n module top-level)
+  syncLocaleToBackend()
 
-  // Also listen for cli-args events from Rust (emitted during setup)
+  // Listen for cli-args events from Rust (emitted during setup)
+  // Removed invoke('get_cli_args') to avoid duplicate calls and improve startup speed
   try {
     await listen<string[]>('cli-args', async (event) => {
       console.log('CLI args event received:', event.payload)
       if (event.payload && event.payload.length > 0) {
+        store.setPendingCliArgs(event.payload)
         await router.push('/')
-        window.dispatchEvent(new CustomEvent('cli-args-received', { detail: event.payload }))
       }
     })
   } catch (error) {
