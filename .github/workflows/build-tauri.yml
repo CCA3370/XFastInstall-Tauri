@@ -44,5 +44,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: XFastInstall-windows-portable
-          path: src-tauri/target/release/XFastInstall.exe
+          path: XFastInstall-Tauri\target\release\xfastinstall.exe
           if-no-files-found: error
