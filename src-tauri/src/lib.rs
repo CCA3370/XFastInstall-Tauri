@@ -5,6 +5,8 @@ mod models;
 mod registry;
 mod scanner;
 
+use std::collections::HashMap;
+
 use analyzer::Analyzer;
 use installer::Installer;
 use models::{AnalysisResult, InstallTask};
@@ -22,9 +24,13 @@ fn get_platform() -> String {
 }
 
 #[tauri::command]
-fn analyze_addons(paths: Vec<String>, xplane_path: String) -> Result<AnalysisResult, String> {
+fn analyze_addons(
+    paths: Vec<String>,
+    xplane_path: String,
+    passwords: Option<HashMap<String, String>>,
+) -> Result<AnalysisResult, String> {
     let analyzer = Analyzer::new();
-    Ok(analyzer.analyze(paths, &xplane_path))
+    Ok(analyzer.analyze(paths, &xplane_path, passwords))
 }
 
 #[tauri::command]

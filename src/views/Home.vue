@@ -211,6 +211,8 @@ const showPasswordModal = ref(false)
 const passwordRequiredPaths = ref<string[]>([])
 const pendingAnalysisPaths = ref<string[]>([])
 const collectedPasswords = ref<Record<string, string>>({})
+const passwordRetryCount = ref(0)
+const MAX_PASSWORD_RETRIES = 3
 
 // Tauri drag-drop event unsubscribe function
 let unlistenDragDrop: UnlistenFn | null = null
@@ -299,7 +301,13 @@ onMounted(async () => {
     console.log('Processing pending CLI args:', store.pendingCliArgs)
     const args = [...store.pendingCliArgs]
     store.clearPendingCliArgs()
-    await analyzeFiles(args)
+    try {
+      await analyzeFiles(args)
+    } catch (error) {
+      console.error('Failed to process CLI args:', error)
+      logError(`Failed to process CLI args: ${error}`, 'app')
+      modal.showError(String(error))
+    }
   }
 })
 
@@ -385,6 +393,8 @@ async function analyzeFiles(paths: string[], passwords?: Record<string, string>)
       if (allowedTasks.length > 0) {
         store.setCurrentTasks(allowedTasks)
         showConfirmation.value = true
+        // Reset password state on successful analysis
+        resetPasswordState()
         // Non-blocking log call
         logBasic(t('log.analysisCompleted'), 'analysis')
         logOperation(t('log.analysisCompleted'), t('log.taskCount', { count: allowedTasks.length }))
@@ -414,6 +424,18 @@ async function handlePasswordSubmit(passwords: Record<string, string>) {
   logOperation(t('log.passwordEntered'), t('log.fileCount', { count: Object.keys(passwords).length }))
   // Merge new passwords with previously collected ones
   const allPasswords = { ...collectedPasswords.value, ...passwords }
+
+  // Increment retry counter
+  passwordRetryCount.value++
+
+  // Check if we've exceeded retry limit
+  if (passwordRetryCount.value > MAX_PASSWORD_RETRIES) {
+    logOperation(t('log.taskAborted'), t('log.passwordMaxRetries'))
+    toast.error(t('password.maxRetries'))
+    resetPasswordState()
+    return
+  }
+
   // Re-analyze with passwords
   await analyzeFiles(pendingAnalysisPaths.value, allPasswords)
 }
@@ -422,9 +444,15 @@ async function handlePasswordSubmit(passwords: Record<string, string>) {
 function handlePasswordCancel() {
   showPasswordModal.value = false
   logOperation(t('log.taskAborted'), t('log.passwordCanceled'))
+  resetPasswordState()
+}
+
+// Reset password state
+function resetPasswordState() {
   pendingAnalysisPaths.value = []
   passwordRequiredPaths.value = []
   collectedPasswords.value = {}
+  passwordRetryCount.value = 0
 }
 
 async function handleInstall() {

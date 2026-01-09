@@ -28,9 +28,24 @@ export const useAppStore = defineStore('app', () => {
   // Overwrite settings per task (taskId -> shouldOverwrite)
   const overwriteSettings = ref<Record<string, boolean>>({})
 
+  // Size confirmation per task (taskId -> confirmed)
+  const sizeConfirmations = ref<Record<string, boolean>>({})
+
   // Check if any task has conflicts
   const hasConflicts = computed(() => {
     return currentTasks.value.some(task => task.conflictExists === true)
+  })
+
+  // Check if any task has size warnings
+  const hasSizeWarnings = computed(() => {
+    return currentTasks.value.some(task => task.sizeWarning)
+  })
+
+  // Check if all size warnings have been confirmed
+  const allSizeWarningsConfirmed = computed(() => {
+    const tasksWithWarnings = currentTasks.value.filter(task => task.sizeWarning)
+    if (tasksWithWarnings.length === 0) return true
+    return tasksWithWarnings.every(task => sizeConfirmations.value[task.id] === true)
   })
 
   // Load settings
@@ -77,13 +92,15 @@ export const useAppStore = defineStore('app', () => {
 
   function setCurrentTasks(tasks: InstallTask[]) {
     currentTasks.value = tasks
-    // Reset overwrite settings when tasks change
+    // Reset overwrite settings and size confirmations when tasks change
     overwriteSettings.value = {}
+    sizeConfirmations.value = {}
   }
 
   function clearTasks() {
     currentTasks.value = []
     overwriteSettings.value = {}
+    sizeConfirmations.value = {}
   }
 
   // Set overwrite for a specific task
@@ -105,12 +122,32 @@ export const useAppStore = defineStore('app', () => {
     return overwriteSettings.value[taskId] ?? false
   }
 
-  // Prepare tasks with overwrite settings for installation
+  // Prepare tasks with overwrite and size confirmation settings for installation
   function getTasksWithOverwrite(): InstallTask[] {
     return currentTasks.value.map(task => ({
       ...task,
-      shouldOverwrite: overwriteSettings.value[task.id] ?? false
+      shouldOverwrite: overwriteSettings.value[task.id] ?? false,
+      sizeConfirmed: sizeConfirmations.value[task.id] ?? false
     }))
+  }
+
+  // Set size confirmation for a specific task
+  function setTaskSizeConfirmed(taskId: string, confirmed: boolean) {
+    sizeConfirmations.value[taskId] = confirmed
+  }
+
+  // Get size confirmation for a task
+  function getTaskSizeConfirmed(taskId: string): boolean {
+    return sizeConfirmations.value[taskId] ?? false
+  }
+
+  // Confirm all size warnings at once
+  function confirmAllSizeWarnings(confirmed: boolean) {
+    for (const task of currentTasks.value) {
+      if (task.sizeWarning) {
+        sizeConfirmations.value[task.id] = confirmed
+      }
+    }
   }
 
   // Set pending CLI args for Home.vue to process
@@ -131,7 +168,10 @@ export const useAppStore = defineStore('app', () => {
     installPreferences,
     logLevel,
     overwriteSettings,
+    sizeConfirmations,
     hasConflicts,
+    hasSizeWarnings,
+    allSizeWarningsConfirmed,
     pendingCliArgs,
     setXplanePath,
     loadXplanePath,
@@ -143,6 +183,9 @@ export const useAppStore = defineStore('app', () => {
     setGlobalOverwrite,
     getTaskOverwrite,
     getTasksWithOverwrite,
+    setTaskSizeConfirmed,
+    getTaskSizeConfirmed,
+    confirmAllSizeWarnings,
     setPendingCliArgs,
     clearPendingCliArgs,
   }

@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -9,6 +9,67 @@ use tauri::{AppHandle, Emitter};
 use crate::logger;
 use crate::logger::{tr, LogMsg};
 use crate::models::{AddonType, InstallPhase, InstallProgress, InstallTask};
+
+/// Maximum allowed extraction size (20 GB) - archives larger than this will show a warning
+pub const MAX_EXTRACTION_SIZE: u64 = 20 * 1024 * 1024 * 1024;
+
+/// Maximum compression ratio to detect zip bombs (100:1)
+pub const MAX_COMPRESSION_RATIO: u64 = 100;
+
+/// Sanitize a file path to prevent path traversal attacks
+/// Returns None if the path is unsafe (contains `..` or is absolute)
+fn sanitize_path(path: &Path) -> Option<PathBuf> {
+    let mut result = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(c) => result.push(c),
+            Component::CurDir => {} // Skip "."
+            Component::ParentDir => return None, // Reject ".."
+            Component::Prefix(_) | Component::RootDir => return None, // Reject absolute paths
+        }
+    }
+    if result.as_os_str().is_empty() {
+        None
+    } else {
+        Some(result)
+    }
+}
+
+/// Check if a path stays within the target directory (no escape via symlinks or ..)
+fn path_is_safe(target: &Path, path: &Path) -> bool {
+    // Canonicalize both paths to resolve symlinks and relative components
+    // If canonicalization fails, the path doesn't exist yet which is fine for new files
+    let target_canonical = match target.canonicalize() {
+        Ok(p) => p,
+        Err(_) => return true, // Target doesn't exist yet, will be created
+    };
+
+    // For the output path, check if it would be inside target
+    // Since the file doesn't exist yet, we check the parent
+    let path_to_check = if path.exists() {
+        match path.canonicalize() {
+            Ok(p) => p,
+            Err(_) => return false,
+        }
+    } else {
+        // File doesn't exist yet, check parent
+        if let Some(parent) = path.parent() {
+            if parent.exists() {
+                match parent.canonicalize() {
+                    Ok(p) => p.join(path.file_name().unwrap_or_default()),
+                    Err(_) => return false,
+                }
+            } else {
+                // Parent doesn't exist either, this is okay for nested dirs
+                return true;
+            }
+        } else {
+            return false;
+        }
+    };
+
+    path_to_check.starts_with(&target_canonical)
+}
 
 /// Directory statistics for backup verification
 struct DirectoryInfo {
@@ -248,6 +309,7 @@ impl Installer {
     fn install_task_with_progress(&self, task: &InstallTask, ctx: &ProgressContext) -> Result<()> {
         let source = Path::new(&task.source_path);
         let target = Path::new(&task.target_path);
+        let password = task.password.as_deref();
 
         // Create parent directory if it doesn't exist
         if let Some(parent) = target.parent() {
@@ -257,10 +319,10 @@ impl Installer {
 
         // Handle overwrite logic if enabled and target exists
         if task.should_overwrite && target.exists() {
-            self.handle_overwrite_with_progress(task, source, target, ctx)?;
+            self.handle_overwrite_with_progress(task, source, target, ctx, password)?;
         } else {
             // Normal installation
-            self.install_content_with_progress(source, target, task.archive_internal_root.as_deref(), ctx)?;
+            self.install_content_with_progress(source, target, task.archive_internal_root.as_deref(), ctx, password)?;
         }
 
         Ok(())
@@ -273,11 +335,12 @@ impl Installer {
         target: &Path,
         internal_root: Option<&str>,
         ctx: &ProgressContext,
+        password: Option<&str>,
     ) -> Result<()> {
         if source.is_dir() {
             self.copy_directory_with_progress(source, target, ctx)?;
         } else if source.is_file() {
-            self.extract_archive_with_progress(source, target, internal_root, ctx)?;
+            self.extract_archive_with_progress(source, target, internal_root, ctx, password)?;
         } else {
             return Err(anyhow::anyhow!("Source path is neither file nor directory"));
         }
@@ -291,6 +354,7 @@ impl Installer {
         source: &Path,
         target: &Path,
         ctx: &ProgressContext,
+        password: Option<&str>,
     ) -> Result<()> {
         match task.addon_type {
             AddonType::Aircraft => {
@@ -299,6 +363,7 @@ impl Installer {
                     target,
                     task.archive_internal_root.as_deref(),
                     ctx,
+                    password,
                 )?;
             }
             _ => {
@@ -307,7 +372,7 @@ impl Installer {
                     fs::remove_dir_all(target)
                         .context(format!("Failed to delete existing folder: {:?}", target))?;
                 }
-                self.install_content_with_progress(source, target, task.archive_internal_root.as_deref(), ctx)?;
+                self.install_content_with_progress(source, target, task.archive_internal_root.as_deref(), ctx, password)?;
             }
         }
         Ok(())
@@ -320,6 +385,7 @@ impl Installer {
         target: &Path,
         internal_root: Option<&str>,
         ctx: &ProgressContext,
+        password: Option<&str>,
     ) -> Result<()> {
         // Step 1: Create backup of important files
         let backup = self.backup_aircraft_data(target)?;
@@ -337,7 +403,7 @@ impl Installer {
         }
 
         // Step 4: Install new content with progress
-        let install_result = self.install_content_with_progress(source, target, internal_root, ctx);
+        let install_result = self.install_content_with_progress(source, target, internal_root, ctx, password);
 
         // Step 5: Restore backup and verify
         let restore_verified = if let Some(ref backup_data) = backup {
@@ -655,6 +721,7 @@ impl Installer {
         target: &Path,
         internal_root: Option<&str>,
         ctx: &ProgressContext,
+        password: Option<&str>,
     ) -> Result<()> {
         let extension = archive
             .extension()
@@ -663,8 +730,8 @@ impl Installer {
 
         match extension {
             "zip" => self.extract_zip_with_progress(archive, target, internal_root, ctx)?,
-            "7z" => self.extract_7z_with_progress(archive, target, internal_root, ctx)?,
-            "rar" => self.extract_rar_with_progress(archive, target, internal_root, ctx)?,
+            "7z" => self.extract_7z_with_progress(archive, target, internal_root, ctx, password)?,
+            "rar" => self.extract_rar_with_progress(archive, target, internal_root, ctx, password)?,
             _ => return Err(anyhow::anyhow!("Unsupported archive format: {}", extension)),
         }
 
@@ -672,16 +739,18 @@ impl Installer {
     }
 
     /// Extract ZIP archive with progress tracking
+    /// Note: Size warnings are now handled at analysis time, not extraction time.
+    /// The size_confirmed flag on InstallTask indicates user has acknowledged any warnings.
     fn extract_zip_with_progress(
         &self,
-        archive: &Path,
+        archive_path: &Path,
         target: &Path,
         internal_root: Option<&str>,
         ctx: &ProgressContext,
     ) -> Result<()> {
         use zip::ZipArchive;
 
-        let file = fs::File::open(archive)?;
+        let file = fs::File::open(archive_path)?;
         let mut archive = ZipArchive::new(file)?;
 
         let internal_root_normalized = internal_root.map(|s| s.replace('\\', "/"));
@@ -689,9 +758,10 @@ impl Installer {
 
         for i in 0..archive.len() {
             let mut file = archive.by_index(i)?;
+            // Use enclosed_name() which already provides path traversal protection
             let file_path = match file.enclosed_name() {
                 Some(path) => path.to_path_buf(),
-                None => continue,
+                None => continue, // Skip paths that would escape (e.g., containing ..)
             };
 
             let file_path_str = file_path.to_string_lossy().replace('\\', "/");
@@ -707,9 +777,17 @@ impl Installer {
                 if stripped.is_empty() {
                     continue;
                 }
-                PathBuf::from(stripped)
+                // Additional sanitization for the stripped path
+                match sanitize_path(Path::new(stripped)) {
+                    Some(p) => p,
+                    None => continue, // Skip unsafe paths
+                }
             } else {
-                file_path
+                // Additional sanitization check
+                match sanitize_path(&file_path) {
+                    Some(p) => p,
+                    None => continue,
+                }
             };
 
             let outpath = target.join(&relative_path);
@@ -757,33 +835,40 @@ impl Installer {
         target: &Path,
         internal_root: Option<&str>,
         ctx: &ProgressContext,
+        password: Option<&str>,
     ) -> Result<()> {
-        // Extract to temp directory first
-        let temp_dir = std::env::temp_dir().join(format!("xfastinstall_7z_{}", uuid::Uuid::new_v4()));
-        fs::create_dir_all(&temp_dir)?;
+        // Create secure temp directory using tempfile crate
+        let temp_dir = tempfile::Builder::new()
+            .prefix("xfastinstall_7z_")
+            .tempdir()
+            .context("Failed to create secure temp directory")?;
 
-        sevenz_rust2::decompress_file(archive, &temp_dir)
-            .map_err(|e| anyhow::anyhow!("Failed to extract 7z: {}", e))?;
+        // Extract with password if provided
+        if let Some(pwd) = password {
+            sevenz_rust2::decompress_file_with_password(archive, temp_dir.path(), pwd.into())
+                .map_err(|e| anyhow::anyhow!("Failed to extract 7z with password: {}", e))?;
+        } else {
+            sevenz_rust2::decompress_file(archive, temp_dir.path())
+                .map_err(|e| anyhow::anyhow!("Failed to extract 7z: {}", e))?;
+        }
 
         // Determine source path (with or without internal_root)
         let source_path = if let Some(internal_root) = internal_root {
             let internal_root_normalized = internal_root.replace('\\', "/");
-            let path = temp_dir.join(&internal_root_normalized);
+            let path = temp_dir.path().join(&internal_root_normalized);
             if path.exists() && path.is_dir() {
                 path
             } else {
-                temp_dir.clone()
+                temp_dir.path().to_path_buf()
             }
         } else {
-            temp_dir.clone()
+            temp_dir.path().to_path_buf()
         };
 
         // Copy with progress tracking
         self.copy_directory_with_progress(&source_path, target, ctx)?;
 
-        // Cleanup
-        let _ = fs::remove_dir_all(&temp_dir);
-
+        // TempDir automatically cleans up when dropped
         Ok(())
     }
 
@@ -795,13 +880,23 @@ impl Installer {
         target: &Path,
         internal_root: Option<&str>,
         ctx: &ProgressContext,
+        password: Option<&str>,
     ) -> Result<()> {
-        // Extract to temp directory first
-        let temp_dir = std::env::temp_dir().join(format!("xfastinstall_rar_{}", uuid::Uuid::new_v4()));
-        fs::create_dir_all(&temp_dir)?;
+        // Create secure temp directory using tempfile crate
+        let temp_dir = tempfile::Builder::new()
+            .prefix("xfastinstall_rar_")
+            .tempdir()
+            .context("Failed to create secure temp directory")?;
 
-        // Extract using the typestate pattern
-        let mut arch = unrar::Archive::new(archive)
+        // Extract using the typestate pattern (with password if provided)
+        let archive_builder = unrar::Archive::new(archive);
+        let archive_builder = if let Some(pwd) = password {
+            archive_builder.with_password(pwd.to_string())
+        } else {
+            archive_builder
+        };
+
+        let mut arch = archive_builder
             .open_for_processing()
             .map_err(|e| anyhow::anyhow!("Failed to open RAR for extraction: {:?}", e))?;
 
@@ -809,7 +904,7 @@ impl Installer {
             .map_err(|e| anyhow::anyhow!("Failed to read RAR header: {:?}", e))?
         {
             arch = if header.entry().is_file() {
-                header.extract_with_base(&temp_dir)
+                header.extract_with_base(temp_dir.path())
                     .map_err(|e| anyhow::anyhow!("Failed to extract RAR entry: {:?}", e))?
             } else {
                 header.skip()
@@ -820,22 +915,85 @@ impl Installer {
         // Determine source path (with or without internal_root)
         let source_path = if let Some(internal_root) = internal_root {
             let internal_root_normalized = internal_root.replace('\\', "/");
-            let path = temp_dir.join(&internal_root_normalized);
+            let path = temp_dir.path().join(&internal_root_normalized);
             if path.exists() && path.is_dir() {
                 path
             } else {
-                temp_dir.clone()
+                temp_dir.path().to_path_buf()
             }
         } else {
-            temp_dir.clone()
+            temp_dir.path().to_path_buf()
         };
 
         // Copy with progress tracking
         self.copy_directory_with_progress(&source_path, target, ctx)?;
 
-        // Cleanup
-        let _ = fs::remove_dir_all(&temp_dir);
-
+        // TempDir automatically cleans up when dropped
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sanitize_path_normal() {
+        let path = Path::new("folder/subfolder/file.txt");
+        let result = sanitize_path(path);
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), PathBuf::from("folder/subfolder/file.txt"));
+    }
+
+    #[test]
+    fn test_sanitize_path_rejects_parent_dir() {
+        let path = Path::new("folder/../../../etc/passwd");
+        let result = sanitize_path(path);
+        assert!(result.is_none(), "Path with .. should be rejected");
+    }
+
+    #[test]
+    fn test_sanitize_path_rejects_absolute_unix() {
+        let path = Path::new("/etc/passwd");
+        let result = sanitize_path(path);
+        assert!(result.is_none(), "Absolute Unix path should be rejected");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_sanitize_path_rejects_absolute_windows() {
+        let path = Path::new("C:\\Windows\\System32");
+        let result = sanitize_path(path);
+        assert!(result.is_none(), "Absolute Windows path should be rejected");
+    }
+
+    #[test]
+    fn test_sanitize_path_handles_current_dir() {
+        let path = Path::new("./folder/./file.txt");
+        let result = sanitize_path(path);
+        assert!(result.is_some());
+        // Current dir markers should be skipped
+        assert_eq!(result.unwrap(), PathBuf::from("folder/file.txt"));
+    }
+
+    #[test]
+    fn test_sanitize_path_empty() {
+        let path = Path::new("");
+        let result = sanitize_path(path);
+        assert!(result.is_none(), "Empty path should be rejected");
+    }
+
+    #[test]
+    fn test_sanitize_path_only_parent() {
+        let path = Path::new("..");
+        let result = sanitize_path(path);
+        assert!(result.is_none(), "Only parent dir should be rejected");
+    }
+
+    #[test]
+    fn test_zip_bomb_constants() {
+        // Verify constants are reasonable
+        assert_eq!(MAX_EXTRACTION_SIZE, 10 * 1024 * 1024 * 1024); // 10 GB
+        assert_eq!(MAX_COMPRESSION_RATIO, 100); // 100:1
     }
 }

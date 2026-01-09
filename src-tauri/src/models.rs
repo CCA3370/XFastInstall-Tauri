@@ -33,6 +33,15 @@ pub struct InstallTask {
     /// Password for encrypted archives
     #[serde(skip_serializing_if = "Option::is_none")]
     pub password: Option<String>,
+    /// Estimated uncompressed size in bytes (for archives)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub estimated_size: Option<u64>,
+    /// Size warning message if archive is suspiciously large or has high compression ratio
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub size_warning: Option<String>,
+    /// Whether user has confirmed they trust this archive (for large/suspicious archives)
+    #[serde(default)]
+    pub size_confirmed: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -41,6 +41,19 @@
             </div>
           </div>
 
+          <!-- Size Warning Banner (only show if any size warnings exist) -->
+          <div v-if="store.hasSizeWarnings" class="mb-2 p-2.5 bg-red-500/10 border border-red-500/20 rounded-lg flex-shrink-0">
+            <div class="flex items-start space-x-2">
+              <svg class="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+              </svg>
+              <div class="flex-1">
+                <span class="font-medium text-sm text-red-100"><AnimatedText>{{ $t('modal.sizeWarningTitle') }}</AnimatedText></span>
+                <p class="text-xs text-red-200/70"><AnimatedText>{{ $t('modal.sizeWarningDesc') }}</AnimatedText></p>
+              </div>
+            </div>
+          </div>
+
           <!-- Tasks List -->
           <div class="tasks-list mb-3 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
             <div
@@ -100,6 +113,26 @@
                       <span v-else><AnimatedText>{{ $t('modal.overwriteNote') }}</AnimatedText></span>
                     </div>
                   </div>
+                  <!-- Size warning with confirmation checkbox -->
+                  <div v-if="task.sizeWarning" class="mt-1.5 p-2 bg-red-500/10 border border-red-500/20 rounded">
+                    <div class="flex items-start space-x-2">
+                      <svg class="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                      </svg>
+                      <div class="flex-1 min-w-0">
+                        <p class="text-xs text-red-300">{{ parseSizeWarning(task.sizeWarning).message }}</p>
+                        <label class="flex items-center space-x-1.5 mt-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            :checked="store.getTaskSizeConfirmed(task.id)"
+                            @change="toggleTaskSizeConfirm(task.id)"
+                            class="w-3 h-3 rounded border-red-500/50 bg-red-500/10 text-red-500 focus:ring-red-500/50"
+                          >
+                          <span class="text-xs text-red-200"><AnimatedText>{{ $t('modal.confirmTrustArchive') }}</AnimatedText></span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -118,7 +151,13 @@
             </button>
             <button
               @click="$emit('confirm')"
-              class="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 rounded-lg transition-all duration-200 hover:scale-105 hover:shadow-lg hover:shadow-green-500/25 text-sm font-medium flex items-center space-x-1.5"
+              :disabled="installDisabled"
+              :class="[
+                'px-4 py-2 rounded-lg transition-all duration-200 text-sm font-medium flex items-center space-x-1.5',
+                installDisabled
+                  ? 'bg-gray-600 cursor-not-allowed opacity-50'
+                  : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 hover:scale-105 hover:shadow-lg hover:shadow-green-500/25'
+              ]"
             >
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
@@ -133,14 +172,41 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { AddonType } from '@/types'
 import AnimatedText from '@/components/AnimatedText.vue'
+import { useI18n } from 'vue-i18n'
 
+const { t } = useI18n()
 const store = useAppStore()
 
 defineEmits(['close', 'confirm'])
+
+// Parse size warning message to get human-readable text
+function parseSizeWarning(warning: string): { type: 'ratio' | 'size', message: string } {
+  if (warning.startsWith('SUSPICIOUS_RATIO:')) {
+    const parts = warning.split(':')
+    const ratio = parts[1]
+    const size = parseFloat(parts[2]) / 1024 / 1024 / 1024
+    return {
+      type: 'ratio',
+      message: t('modal.suspiciousRatio', { ratio, size: size.toFixed(2) })
+    }
+  } else if (warning.startsWith('LARGE_SIZE:')) {
+    const size = warning.split(':')[1]
+    return {
+      type: 'size',
+      message: t('modal.largeSize', { size })
+    }
+  }
+  return { type: 'size', message: warning }
+}
+
+// Check if install button should be disabled
+const installDisabled = computed(() => {
+  return store.hasSizeWarnings && !store.allSizeWarningsConfirmed
+})
 
 // Global overwrite state (local to modal, syncs with store)
 const globalOverwrite = ref(false)
@@ -158,6 +224,12 @@ function toggleTaskOverwrite(taskId: string) {
 
   // Update global toggle state based on individual toggles
   updateGlobalToggleState()
+}
+
+// Toggle individual task size confirmation
+function toggleTaskSizeConfirm(taskId: string) {
+  const currentValue = store.getTaskSizeConfirmed(taskId)
+  store.setTaskSizeConfirmed(taskId, !currentValue)
 }
 
 // Update global toggle to reflect individual states

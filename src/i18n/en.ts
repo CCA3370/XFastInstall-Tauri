@@ -51,6 +51,7 @@ export default {
     xplanePathDesc: 'Set the root directory path of X-Plane',
     installPreferences: 'Installation Preferences',
     installPreferencesDesc: 'Choose which add-on types to auto-install',
+    toggleAll: 'Enable/Disable All',
     typeAircraft: 'Aircraft',
     typeScenery: 'Scenery',
     typeSceneryLibrary: 'Scenery Library',
@@ -59,6 +60,7 @@ export default {
     savePath: 'Save Path',
     pathSaved: 'Path saved successfully',
     pathError: 'Please enter a path',
+    selectXplaneFolder: 'Select X-Plane Folder',
     windowsIntegration: 'Windows Integration',
     windowsIntegrationDesc: 'Add "Install to X-Plane" to the context menu',
     registerContextMenu: 'Register Context Menu',
@@ -97,14 +99,20 @@ export default {
     overwriteAll: 'Overwrite all existing',
     overwriteAllDesc: 'Delete existing folders and install fresh copies',
     overwriteNote: 'Will delete existing folder before installing',
-    overwriteAircraftNote: 'Will preserve liveries and preference files'
+    overwriteAircraftNote: 'Will preserve liveries and preference files',
+    sizeWarningTitle: 'Security Warning',
+    sizeWarningDesc: 'Some archives have unusual size characteristics. Please review and confirm before installing.',
+    suspiciousRatio: 'Suspicious compression ratio ({ratio}:1). Estimated size: {size} GB. This may be a zip bomb.',
+    largeSize: 'Very large archive (estimated {size} GB). Ensure you have enough disk space.',
+    confirmTrustArchive: 'I trust this archive and want to proceed'
   },
   password: {
     title: 'Password Required',
     subtitle: 'The following archives require a password to extract',
     placeholder: 'Enter password',
     unlock: 'Unlock and Continue',
-    wrongPassword: 'Wrong password, please try again'
+    wrongPassword: 'Wrong password, please try again',
+    maxRetries: 'Too many password attempts, please try again later'
   },
   toast: {
     pathRequired: 'Please set X-Plane path in Settings first'
@@ -129,6 +137,7 @@ export default {
     xplanePathNotSet: 'X-Plane path not set',
     passwordRequired: 'Password required',
     passwordEntered: 'Password entered',
-    passwordCanceled: 'User canceled password input'
+    passwordCanceled: 'User canceled password input',
+    passwordMaxRetries: 'Maximum password attempts exceeded'
   }
 }

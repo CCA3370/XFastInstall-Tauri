@@ -51,6 +51,7 @@ export default {
     xplanePathDesc: '设置X-Plane的根目录路径',
     installPreferences: '安装偏好',
     installPreferencesDesc: '选择自动安装的插件类型',
+    toggleAll: '全部启用/禁用',
     typeAircraft: '机模 (Aircraft)',
     typeScenery: '地景 (Scenery)',
     typeSceneryLibrary: '地景库 (Library)',
@@ -59,6 +60,7 @@ export default {
     savePath: '保存路径',
     pathSaved: '路径保存成功',
     pathError: '请输入路径',
+    selectXplaneFolder: '选择 X-Plane 文件夹',
     windowsIntegration: 'Windows 集成',
     windowsIntegrationDesc: '在右键菜单中添加"安装到X-Plane"选项',
     registerContextMenu: '注册右键菜单',
@@ -97,14 +99,20 @@ export default {
     overwriteAll: '覆盖所有已存在项',
     overwriteAllDesc: '删除现有文件夹并安装新内容',
     overwriteNote: '安装前将删除现有文件夹',
-    overwriteAircraftNote: '将保留涂装和偏好设置文件'
+    overwriteAircraftNote: '将保留涂装和偏好设置文件',
+    sizeWarningTitle: '安全警告',
+    sizeWarningDesc: '部分压缩包存在异常的大小特征，请在安装前仔细确认。',
+    suspiciousRatio: '可疑的压缩比 ({ratio}:1)，预估解压大小: {size} GB。这可能是压缩炸弹。',
+    largeSize: '超大压缩包 (预估 {size} GB)，请确保有足够的磁盘空间。',
+    confirmTrustArchive: '我信任此压缩包，继续安装'
   },
   password: {
     title: '需要密码',
     subtitle: '以下压缩包需要输入密码才能解压',
     placeholder: '输入密码',
     unlock: '解锁并继续',
-    wrongPassword: '密码错误，请重试'
+    wrongPassword: '密码错误，请重试',
+    maxRetries: '密码尝试次数过多，请稍后再试'
   },
   toast: {
     pathRequired: '请先在设置中配置X-Plane路径'
@@ -129,6 +137,7 @@ export default {
     xplanePathNotSet: '未设置 X-Plane 路径',
     passwordRequired: '需要输入密码',
     passwordEntered: '密码已输入',
-    passwordCanceled: '用户取消密码输入'
+    passwordCanceled: '用户取消密码输入',
+    passwordMaxRetries: '密码尝试次数已达上限'
   }
 }

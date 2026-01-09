@@ -21,6 +21,12 @@ export interface InstallTask {
   shouldOverwrite?: boolean;
   /** Password for encrypted archives */
   password?: string;
+  /** Estimated uncompressed size in bytes (for archives) */
+  estimatedSize?: number;
+  /** Size warning message if archive is suspiciously large or has high compression ratio */
+  sizeWarning?: string;
+  /** Whether user has confirmed they trust this archive (for large/suspicious archives) */
+  sizeConfirmed?: boolean;
 }
 
 export interface AnalysisResult {

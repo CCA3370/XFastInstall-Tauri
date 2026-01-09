@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 use rayon::prelude::*;
@@ -6,6 +8,7 @@ use crate::logger;
 use crate::logger::{tr, LogMsg};
 use crate::models::{AddonType, AnalysisResult, DetectedItem, InstallTask};
 use crate::scanner::{Scanner, PasswordRequiredError};
+use crate::installer::{MAX_EXTRACTION_SIZE, MAX_COMPRESSION_RATIO};
 
 pub struct Analyzer {
     scanner: Scanner,
@@ -19,18 +22,26 @@ impl Analyzer {
     }
 
     /// Analyze a list of paths and return installation tasks
-    pub fn analyze(&self, paths: Vec<String>, xplane_path: &str) -> AnalysisResult {
+    pub fn analyze(
+        &self,
+        paths: Vec<String>,
+        xplane_path: &str,
+        passwords: Option<HashMap<String, String>>,
+    ) -> AnalysisResult {
         logger::log_info(
             &format!("{}: {} path(s)", tr(LogMsg::AnalysisStarted), paths.len()),
             Some("analyzer"),
         );
+
+        let passwords_ref = passwords.as_ref();
 
         // Parallel scan all paths using rayon for better performance
         let results: Vec<_> = paths
             .par_iter()
             .map(|path_str| {
                 let path = Path::new(path_str);
-                (path_str.clone(), self.scanner.scan_path(path))
+                let password = passwords_ref.and_then(|p| p.get(path_str).map(|s| s.as_str()));
+                (path_str.clone(), self.scanner.scan_path(path, password), password.map(|s| s.to_string()))
             })
             .collect();
 
@@ -38,10 +49,18 @@ impl Analyzer {
         let mut all_detected = Vec::new();
         let mut errors = Vec::new();
         let mut password_required = Vec::new();
+        // Track which archives have passwords for setting on tasks later
+        let mut archive_passwords: HashMap<String, String> = HashMap::new();
 
-        for (path_str, result) in results {
+        for (path_str, result, password) in results {
             match result {
-                Ok(detected) => all_detected.extend(detected),
+                Ok(detected) => {
+                    // Store password for this archive if provided
+                    if let Some(pwd) = password {
+                        archive_passwords.insert(path_str.clone(), pwd);
+                    }
+                    all_detected.extend(detected);
+                }
                 Err(e) => {
                     // Check if this is a password-required error
                     if let Some(pwd_err) = e.downcast_ref::<PasswordRequiredError>() {
@@ -62,10 +81,10 @@ impl Analyzer {
         // Deduplicate detected items by source path hierarchy
         let deduplicated = self.deduplicate(all_detected);
 
-        // Convert to install tasks
+        // Convert to install tasks, passing archive passwords
         let tasks: Vec<InstallTask> = deduplicated
             .into_iter()
-            .map(|item| self.create_install_task(item, xplane_path))
+            .map(|item| self.create_install_task(item, xplane_path, &archive_passwords))
             .collect();
 
         // Deduplicate tasks by target path (e.g., multiple .acf files in same aircraft folder)
@@ -199,7 +218,12 @@ impl Analyzer {
     }
 
     /// Create an install task from a detected item
-    fn create_install_task(&self, item: DetectedItem, xplane_path: &str) -> InstallTask {
+    fn create_install_task(
+        &self,
+        item: DetectedItem,
+        xplane_path: &str,
+        archive_passwords: &HashMap<String, String>,
+    ) -> InstallTask {
         let xplane_root = Path::new(xplane_path);
 
         let target_base = match item.addon_type {
@@ -222,6 +246,12 @@ impl Analyzer {
         // Check if target already exists
         let conflict_exists = target_path.exists();
 
+        // Get password for this archive if it was provided
+        let password = archive_passwords.get(&item.path).cloned();
+
+        // Estimate size and check for warnings (for archives)
+        let (estimated_size, size_warning) = self.estimate_archive_size(&item.path);
+
         InstallTask {
             id: Uuid::new_v4().to_string(),
             addon_type: item.addon_type,
@@ -231,8 +261,119 @@ impl Analyzer {
             conflict_exists: if conflict_exists { Some(true) } else { None },
             archive_internal_root: item.archive_internal_root,
             should_overwrite: false, // Default to false, controlled by frontend
-            password: None, // Will be set by frontend if needed
+            password,
+            estimated_size,
+            size_warning,
+            size_confirmed: false, // User must confirm if there's a warning
         }
+    }
+
+    /// Estimate the uncompressed size of an archive and check for warnings
+    fn estimate_archive_size(&self, path: &str) -> (Option<u64>, Option<String>) {
+        let source_path = Path::new(path);
+
+        // Only estimate for archive files
+        if !source_path.is_file() {
+            return (None, None);
+        }
+
+        let extension = source_path
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+
+        match extension.as_str() {
+            "zip" => self.estimate_zip_size(source_path),
+            "7z" => self.estimate_7z_size(source_path),
+            "rar" => self.estimate_rar_size(source_path),
+            _ => (None, None),
+        }
+    }
+
+    /// Estimate ZIP file uncompressed size
+    fn estimate_zip_size(&self, archive_path: &Path) -> (Option<u64>, Option<String>) {
+        use zip::ZipArchive;
+
+        let file = match fs::File::open(archive_path) {
+            Ok(f) => f,
+            Err(_) => return (None, None),
+        };
+
+        let archive_size = match file.metadata() {
+            Ok(m) => m.len(),
+            Err(_) => return (None, None),
+        };
+
+        let archive = match ZipArchive::new(file) {
+            Ok(a) => a,
+            Err(_) => return (None, None),
+        };
+
+        // Calculate total uncompressed size
+        let mut total_uncompressed: u64 = 0;
+        for i in 0..archive.len() {
+            if let Ok(file) = archive.by_index_raw(i) {
+                total_uncompressed = total_uncompressed.saturating_add(file.size());
+            }
+        }
+
+        self.check_size_warning(archive_size, total_uncompressed)
+    }
+
+    /// Estimate 7z file uncompressed size (approximate)
+    fn estimate_7z_size(&self, archive_path: &Path) -> (Option<u64>, Option<String>) {
+        let archive_size = match fs::metadata(archive_path) {
+            Ok(m) => m.len(),
+            Err(_) => return (None, None),
+        };
+
+        // For 7z, we estimate based on typical compression ratios (3-5x)
+        // This is a rough estimate since 7z doesn't store uncompressed size in headers easily
+        let estimated_uncompressed = archive_size.saturating_mul(4);
+
+        self.check_size_warning(archive_size, estimated_uncompressed)
+    }
+
+    /// Estimate RAR file uncompressed size (approximate)
+    fn estimate_rar_size(&self, archive_path: &Path) -> (Option<u64>, Option<String>) {
+        let archive_size = match fs::metadata(archive_path) {
+            Ok(m) => m.len(),
+            Err(_) => return (None, None),
+        };
+
+        // For RAR, estimate based on typical compression ratios
+        let estimated_uncompressed = archive_size.saturating_mul(4);
+
+        self.check_size_warning(archive_size, estimated_uncompressed)
+    }
+
+    /// Check if the archive size warrants a warning
+    fn check_size_warning(&self, archive_size: u64, estimated_uncompressed: u64) -> (Option<u64>, Option<String>) {
+        let mut warning = None;
+
+        // Check compression ratio (potential zip bomb)
+        if archive_size > 0 {
+            let ratio = estimated_uncompressed / archive_size;
+            if ratio > MAX_COMPRESSION_RATIO {
+                warning = Some(format!(
+                    "SUSPICIOUS_RATIO:{}:{}",
+                    ratio,
+                    estimated_uncompressed
+                ));
+            }
+        }
+
+        // Check absolute size
+        if estimated_uncompressed > MAX_EXTRACTION_SIZE {
+            let size_gb = estimated_uncompressed as f64 / 1024.0 / 1024.0 / 1024.0;
+            warning = Some(format!(
+                "LARGE_SIZE:{:.2}",
+                size_gb
+            ));
+        }
+
+        (Some(estimated_uncompressed), warning)
     }
 }
 
@@ -374,6 +515,9 @@ mod tests {
                 archive_internal_root: None,
                 should_overwrite: false,
                 password: None,
+                estimated_size: None,
+                size_warning: None,
+                size_confirmed: false,
             },
             InstallTask {
                 id: "2".to_string(),
@@ -385,6 +529,9 @@ mod tests {
                 archive_internal_root: None,
                 should_overwrite: false,
                 password: None,
+                estimated_size: None,
+                size_warning: None,
+                size_confirmed: false,
             },
         ];
 
@@ -410,6 +557,9 @@ mod tests {
                 archive_internal_root: None,
                 should_overwrite: false,
                 password: None,
+                estimated_size: None,
+                size_warning: None,
+                size_confirmed: false,
             },
             InstallTask {
                 id: "2".to_string(),
@@ -421,6 +571,9 @@ mod tests {
                 archive_internal_root: None,
                 should_overwrite: false,
                 password: None,
+                estimated_size: None,
+                size_warning: None,
+                size_confirmed: false,
             },
         ];
 
@@ -446,6 +599,9 @@ mod tests {
                 archive_internal_root: None,
                 should_overwrite: false,
                 password: None,
+                estimated_size: None,
+                size_warning: None,
+                size_confirmed: false,
             },
             InstallTask {
                 id: "2".to_string(),
@@ -457,6 +613,9 @@ mod tests {
                 archive_internal_root: None,
                 should_overwrite: false,
                 password: None,
+                estimated_size: None,
+                size_warning: None,
+                size_confirmed: false,
             },
             InstallTask {
                 id: "3".to_string(),
@@ -468,6 +627,9 @@ mod tests {
                 archive_internal_root: None,
                 should_overwrite: false,
                 password: None,
+                estimated_size: None,
+                size_warning: None,
+                size_confirmed: false,
             },
         ];
 

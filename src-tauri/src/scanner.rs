@@ -28,7 +28,7 @@ impl Scanner {
     }
 
     /// Scan a path (file or directory) and detect all addon types
-    pub fn scan_path(&self, path: &Path) -> Result<Vec<DetectedItem>> {
+    pub fn scan_path(&self, path: &Path, password: Option<&str>) -> Result<Vec<DetectedItem>> {
         let mut detected_items = Vec::new();
 
         if path.is_dir() {
@@ -36,7 +36,7 @@ impl Scanner {
         } else if path.is_file() {
             // For archives, we need to extract to temp first or scan without extraction
             // For now, we'll handle archives by treating them as potential root containers
-            detected_items.extend(self.scan_archive(path)?);
+            detected_items.extend(self.scan_archive(path, password)?);
         }
 
         Ok(detected_items)
@@ -71,16 +71,16 @@ impl Scanner {
     }
 
     /// Scan archive without full extraction
-    fn scan_archive(&self, archive_path: &Path) -> Result<Vec<DetectedItem>> {
+    fn scan_archive(&self, archive_path: &Path, password: Option<&str>) -> Result<Vec<DetectedItem>> {
         let extension = archive_path.extension()
             .and_then(|s| s.to_str())
             .unwrap_or("")
             .to_lowercase();
 
         match extension.as_str() {
-            "zip" => self.scan_zip(archive_path),
-            "7z" => self.scan_7z(archive_path),
-            "rar" => self.scan_rar(archive_path),
+            "zip" => self.scan_zip(archive_path, password),
+            "7z" => self.scan_7z(archive_path, password),
+            "rar" => self.scan_rar(archive_path, password),
             _ => {
                 eprintln!("Archive format {} not supported", extension);
                 Ok(vec![])
@@ -89,15 +89,23 @@ impl Scanner {
     }
 
     /// Scan a 7z archive without extraction
-    fn scan_7z(&self, archive_path: &Path) -> Result<Vec<DetectedItem>> {
+    fn scan_7z(&self, archive_path: &Path, password: Option<&str>) -> Result<Vec<DetectedItem>> {
+        // sevenz-rust2 requires password at decompression time, not for listing
+        // Try to open the archive for listing first
         let archive = sevenz_rust2::Archive::open(archive_path)
             .map_err(|e| {
                 let err_str = format!("{:?}", e);
                 // Check for password-related errors
                 if err_str.contains("password") || err_str.contains("Password") || err_str.contains("encrypted") {
-                    anyhow::anyhow!(PasswordRequiredError {
-                        archive_path: archive_path.to_string_lossy().to_string(),
-                    })
+                    // If we don't have a password, request one
+                    if password.is_none() {
+                        anyhow::anyhow!(PasswordRequiredError {
+                            archive_path: archive_path.to_string_lossy().to_string(),
+                        })
+                    } else {
+                        // Password was provided but still failed - wrong password
+                        anyhow::anyhow!("Wrong password for archive: {}", archive_path.display())
+                    }
                 } else {
                     anyhow::anyhow!("Failed to open 7z archive: {}", e)
                 }
@@ -131,7 +139,7 @@ impl Scanner {
                 }
             } else if file_path.ends_with("cycle.json") {
                 // For 7z, we need to extract this single file to read its content
-                if let Ok(content) = self.read_file_from_7z(archive_path, file_path) {
+                if let Ok(content) = self.read_file_from_7z(archive_path, file_path, password) {
                     if let Some(item) = self.detect_navdata_in_archive(file_path, &content, archive_path)? {
                         detected.push(item);
                     }
@@ -143,38 +151,56 @@ impl Scanner {
     }
 
     /// Read a single file content from a 7z archive
-    fn read_file_from_7z(&self, archive_path: &Path, file_path: &str) -> Result<String> {
-        // Create temp directory
-        let temp_dir = std::env::temp_dir().join(format!("xfi_7z_read_{}", uuid::Uuid::new_v4()));
-        fs::create_dir_all(&temp_dir)?;
+    fn read_file_from_7z(&self, archive_path: &Path, file_path: &str, password: Option<&str>) -> Result<String> {
+        // Create secure temp directory using tempfile crate
+        let temp_dir = tempfile::Builder::new()
+            .prefix("xfi_7z_read_")
+            .tempdir()
+            .context("Failed to create secure temp directory")?;
 
-        // Extract to temp
-        sevenz_rust2::decompress_file(archive_path, &temp_dir)
-            .map_err(|e| anyhow::anyhow!("Failed to extract 7z: {}", e))?;
+        // Extract to temp (with password if provided)
+        if let Some(pwd) = password {
+            sevenz_rust2::decompress_file_with_password(archive_path, temp_dir.path(), pwd.into())
+                .map_err(|e| anyhow::anyhow!("Failed to extract 7z with password: {}", e))?;
+        } else {
+            sevenz_rust2::decompress_file(archive_path, temp_dir.path())
+                .map_err(|e| anyhow::anyhow!("Failed to extract 7z: {}", e))?;
+        }
 
-        // Read the target file
-        let target_file = temp_dir.join(file_path);
+        // Sanitize the file path to prevent path traversal
+        let safe_file_path = file_path.replace("..", "").trim_start_matches('/').trim_start_matches('\\');
+        let target_file = temp_dir.path().join(safe_file_path);
         let content = fs::read_to_string(&target_file)
             .context("Failed to read file from 7z")?;
 
-        // Cleanup
-        let _ = fs::remove_dir_all(&temp_dir);
-
+        // TempDir automatically cleans up when dropped
         Ok(content)
     }
 
     /// Scan a RAR archive without extraction
-    fn scan_rar(&self, archive_path: &Path) -> Result<Vec<DetectedItem>> {
-        let archive = unrar::Archive::new(archive_path)
+    fn scan_rar(&self, archive_path: &Path, password: Option<&str>) -> Result<Vec<DetectedItem>> {
+        // Create archive with or without password
+        let archive_builder = unrar::Archive::new(archive_path);
+        let archive = if let Some(pwd) = password {
+            archive_builder.with_password(pwd.to_string())
+        } else {
+            archive_builder
+        };
+
+        let archive = archive
             .open_for_listing()
             .map_err(|e| {
                 let err_str = format!("{:?}", e);
                 // Check for password-related errors
                 if err_str.contains("password") || err_str.contains("Password")
                     || err_str.contains("encrypted") || err_str.contains("ERAR_MISSING_PASSWORD") {
-                    anyhow::anyhow!(PasswordRequiredError {
-                        archive_path: archive_path.to_string_lossy().to_string(),
-                    })
+                    if password.is_none() {
+                        anyhow::anyhow!(PasswordRequiredError {
+                            archive_path: archive_path.to_string_lossy().to_string(),
+                        })
+                    } else {
+                        anyhow::anyhow!("Wrong password for archive: {}", archive_path.display())
+                    }
                 } else {
                     anyhow::anyhow!("Failed to open RAR archive: {:?}", e)
                 }
@@ -210,7 +236,7 @@ impl Scanner {
                 }
             } else if file_path.ends_with("cycle.json") {
                 // For RAR, we need to extract this single file to read its content
-                if let Ok(content) = self.read_file_from_rar(archive_path, file_path) {
+                if let Ok(content) = self.read_file_from_rar(archive_path, file_path, password) {
                     if let Some(item) = self.detect_navdata_in_archive(file_path, &content, archive_path)? {
                         detected.push(item);
                     }
@@ -222,13 +248,22 @@ impl Scanner {
     }
 
     /// Read a single file content from a RAR archive
-    fn read_file_from_rar(&self, archive_path: &Path, target_file: &str) -> Result<String> {
-        // Create temp directory
-        let temp_dir = std::env::temp_dir().join(format!("xfi_rar_read_{}", uuid::Uuid::new_v4()));
-        fs::create_dir_all(&temp_dir)?;
+    fn read_file_from_rar(&self, archive_path: &Path, target_file: &str, password: Option<&str>) -> Result<String> {
+        // Create secure temp directory using tempfile crate
+        let temp_dir = tempfile::Builder::new()
+            .prefix("xfi_rar_read_")
+            .tempdir()
+            .context("Failed to create secure temp directory")?;
 
-        // Extract to temp using the typestate pattern
-        let mut archive = unrar::Archive::new(archive_path)
+        // Extract to temp using the typestate pattern (with password if provided)
+        let archive_builder = unrar::Archive::new(archive_path);
+        let archive_builder = if let Some(pwd) = password {
+            archive_builder.with_password(pwd.to_string())
+        } else {
+            archive_builder
+        };
+
+        let mut archive = archive_builder
             .open_for_processing()
             .map_err(|e| anyhow::anyhow!("Failed to open RAR for processing: {:?}", e))?;
 
@@ -236,7 +271,7 @@ impl Scanner {
             .map_err(|e| anyhow::anyhow!("Failed to read RAR header: {:?}", e))?
         {
             archive = if header.entry().is_file() {
-                header.extract_with_base(&temp_dir)
+                header.extract_with_base(temp_dir.path())
                     .map_err(|e| anyhow::anyhow!("Failed to extract RAR entry: {:?}", e))?
             } else {
                 header.skip()
@@ -244,21 +279,22 @@ impl Scanner {
             };
         }
 
-        // Read the target file
-        let file_path = temp_dir.join(target_file);
+        // Sanitize the file path to prevent path traversal
+        let safe_file_path = target_file.replace("..", "").trim_start_matches('/').trim_start_matches('\\');
+        let file_path = temp_dir.path().join(safe_file_path);
         let content = fs::read_to_string(&file_path)
             .context("Failed to read file from RAR")?;
 
-        // Cleanup
-        let _ = fs::remove_dir_all(&temp_dir);
-
+        // TempDir automatically cleans up when dropped
         Ok(content)
     }
 
     /// Scan a ZIP archive
-    fn scan_zip(&self, zip_path: &Path) -> Result<Vec<DetectedItem>> {
+    fn scan_zip(&self, zip_path: &Path, _password: Option<&str>) -> Result<Vec<DetectedItem>> {
         use zip::ZipArchive;
-        
+
+        // Note: zip crate requires password per-file, not at archive level
+        // Password-protected ZIP handling would need to be done differently
         let file = fs::File::open(zip_path)?;
         let mut archive = ZipArchive::new(file)?;
         let mut detected = Vec::new();

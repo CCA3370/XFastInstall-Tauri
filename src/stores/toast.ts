@@ -8,10 +8,18 @@ export interface Toast {
   type: 'info' | 'success' | 'error' | 'warning'
 }
 
+// Maximum number of toasts to display at once
+const MAX_TOASTS = 5
+
 export const useToastStore = defineStore('toast', () => {
   const toasts = ref<Toast[]>([])
 
   function show(message: string, type: Toast['type'] = 'info') {
+    // Remove oldest toasts if we're at the limit
+    while (toasts.value.length >= MAX_TOASTS) {
+      toasts.value.shift()
+    }
+
     const id = Date.now().toString() + Math.random()
     toasts.value.push({ id, message, type })
     // Toast removal is handled by animationend event in ToastNotification.vue

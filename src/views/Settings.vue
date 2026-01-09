@@ -13,9 +13,9 @@
         <div class="p-4 space-y-3">
           <div class="flex items-center space-x-3">
             <div class="w-8 h-8 bg-blue-100 dark:bg-blue-500/10 rounded-lg flex items-center justify-center flex-shrink-0 text-blue-600 dark:text-blue-400">
+              <!-- Airplane icon -->
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
               </svg>
             </div>
             <div class="flex-1">
@@ -69,15 +69,29 @@
         <!-- Installation Preferences (Left Column) -->
         <section class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300 flex flex-col">
           <div class="p-4 space-y-3 flex-1">
-            <div class="flex items-center space-x-3 mb-2">
-              <div class="w-8 h-8 bg-green-100 dark:bg-green-500/10 rounded-lg flex items-center justify-center flex-shrink-0 text-green-600 dark:text-green-400">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
-                </svg>
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center space-x-3">
+                <div class="w-8 h-8 bg-green-100 dark:bg-green-500/10 rounded-lg flex items-center justify-center flex-shrink-0 text-green-600 dark:text-green-400">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
+                  </svg>
+                </div>
+                <div>
+                  <h3 class="text-sm font-semibold text-gray-900 dark:text-white"><AnimatedText>{{ $t('settings.installPreferences') }}</AnimatedText></h3>
+                </div>
               </div>
-              <div>
-                <h3 class="text-sm font-semibold text-gray-900 dark:text-white"><AnimatedText>{{ $t('settings.installPreferences') }}</AnimatedText></h3>
-              </div>
+              <!-- Master Toggle -->
+              <button
+                @click="toggleAllPreferences"
+                class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none flex-shrink-0"
+                :class="allPreferencesEnabled ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'"
+                :title="$t('settings.toggleAll')"
+              >
+                <span
+                  class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform duration-200 shadow-sm"
+                  :class="allPreferencesEnabled ? 'translate-x-4.5' : 'translate-x-0.5'"
+                />
+              </button>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -100,7 +114,7 @@
 
         <!-- System & About Column (Right Column) -->
         <div class="flex flex-col gap-4">
-          
+
           <!-- System (Windows only) -->
           <transition name="slide-up">
             <section v-if="isWindows" class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300">
@@ -131,21 +145,6 @@
               </div>
             </section>
           </transition>
-
-          <!-- About -->
-          <section class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300">
-            <div class="p-4 flex items-center space-x-4">
-              <div class="w-12 h-12 rounded-xl shadow-lg transform rotate-3 flex-shrink-0 overflow-hidden">
-                <img src="/icon.png" alt="XFastInstall" class="w-full h-full object-cover" />
-              </div>
-              <div>
-                <h3 class="text-base font-bold text-gray-900 dark:text-white">XFastInstall</h3>
-                <p class="text-xs text-gray-500 dark:text-gray-400">
-                  v0.1.0 • © 2026
-                </p>
-              </div>
-            </div>
-          </section>
 
         </div>
       </div>
@@ -244,12 +243,27 @@
           </div>
         </transition>
       </section>
+
+      <!-- 4. About -->
+      <section class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300">
+        <div class="p-4 flex items-center space-x-4">
+          <div class="w-12 h-12 rounded-xl shadow-lg transform rotate-3 flex-shrink-0 overflow-hidden">
+            <img src="/icon.png" alt="XFastInstall" class="w-full h-full object-cover" />
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-gray-900 dark:text-white">XFastInstall</h3>
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+              v0.1.0 • © 2026
+            </p>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useToastStore } from '@/stores/toast'
 import { useModalStore } from '@/stores/modal'
 import { useAppStore } from '@/stores/app'
@@ -278,6 +292,20 @@ const logPath = ref('')
 const logsExpanded = ref(false)
 
 const addonTypes = [AddonType.Aircraft, AddonType.Scenery, AddonType.SceneryLibrary, AddonType.Plugin, AddonType.Navdata]
+
+// Master toggle computed
+const allPreferencesEnabled = computed(() => {
+  return addonTypes.every(type => store.installPreferences[type])
+})
+
+function toggleAllPreferences() {
+  const newValue = !allPreferencesEnabled.value
+  addonTypes.forEach(type => {
+    if (store.installPreferences[type] !== newValue) {
+      store.togglePreference(type)
+    }
+  })
+}
 
 function getTypeName(type: AddonType): string {
   switch (type) {
@@ -310,6 +338,14 @@ onMounted(async () => {
   logPath.value = await logger.getLogPath()
 })
 
+// Cleanup timers on component unmount to prevent memory leaks
+onBeforeUnmount(() => {
+  if (saveTimeout) {
+    clearTimeout(saveTimeout)
+    saveTimeout = null
+  }
+})
+
 // Auto-save logic
 watch(xplanePathInput, (newValue) => {
   if (saveTimeout) clearTimeout(saveTimeout)
@@ -332,7 +368,7 @@ async function selectFolder() {
     const selected = await open({
       directory: true,
       multiple: false,
-      title: 'Select X-Plane Folder'
+      title: t('settings.selectXplaneFolder')
     })
     
     if (selected) {
