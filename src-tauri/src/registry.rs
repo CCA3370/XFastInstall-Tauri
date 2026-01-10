@@ -12,22 +12,23 @@ pub fn register_context_menu() -> Result<()> {
     let exe_path = env::current_exe()?;
     let exe_path_str = exe_path.to_string_lossy();
 
-    let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
+    // Use HKEY_CURRENT_USER instead of HKEY_CLASSES_ROOT to avoid requiring admin privileges
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
     // Register for files (*)
-    let (shell_key, _) = hkcr.create_subkey(r"*\shell\XFastInstall")?;
+    let (shell_key, _) = hkcu.create_subkey(r"Software\Classes\*\shell\XFastInstall")?;
     shell_key.set_value("", &"Install to X-Plane")?;
     shell_key.set_value("Icon", &format!("{}", exe_path_str))?;
 
-    let (command_key, _) = hkcr.create_subkey(r"*\shell\XFastInstall\command")?;
+    let (command_key, _) = hkcu.create_subkey(r"Software\Classes\*\shell\XFastInstall\command")?;
     command_key.set_value("", &format!("\"{}\" \"%1\"", exe_path_str))?;
 
     // Register for directories
-    let (dir_shell_key, _) = hkcr.create_subkey(r"Directory\shell\XFastInstall")?;
+    let (dir_shell_key, _) = hkcu.create_subkey(r"Software\Classes\Directory\shell\XFastInstall")?;
     dir_shell_key.set_value("", &"Install to X-Plane")?;
     dir_shell_key.set_value("Icon", &format!("{}", exe_path_str))?;
 
-    let (dir_command_key, _) = hkcr.create_subkey(r"Directory\shell\XFastInstall\command")?;
+    let (dir_command_key, _) = hkcu.create_subkey(r"Software\Classes\Directory\shell\XFastInstall\command")?;
     dir_command_key.set_value("", &format!("\"{}\" \"%1\"", exe_path_str))?;
 
     Ok(())
@@ -35,22 +36,22 @@ pub fn register_context_menu() -> Result<()> {
 
 #[cfg(target_os = "windows")]
 pub fn unregister_context_menu() -> Result<()> {
-    let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
     // Try to delete for files
-    let _ = hkcr.delete_subkey_all(r"*\shell\XFastInstall");
+    let _ = hkcu.delete_subkey_all(r"Software\Classes\*\shell\XFastInstall");
 
     // Try to delete for directories
-    let _ = hkcr.delete_subkey_all(r"Directory\shell\XFastInstall");
+    let _ = hkcu.delete_subkey_all(r"Software\Classes\Directory\shell\XFastInstall");
 
     Ok(())
 }
 
 #[cfg(target_os = "windows")]
 pub fn is_context_menu_registered() -> bool {
-    let hkcr = RegKey::predef(HKEY_CLASSES_ROOT);
+    let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     // Check if the registry key exists
-    hkcr.open_subkey(r"*\shell\XFastInstall").is_ok()
+    hkcu.open_subkey(r"Software\Classes\*\shell\XFastInstall").is_ok()
 }
 
 #[cfg(not(target_os = "windows"))]
