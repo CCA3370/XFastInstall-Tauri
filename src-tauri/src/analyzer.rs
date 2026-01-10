@@ -347,6 +347,9 @@ impl Analyzer {
             size_confirmed: false, // User must confirm if there's a warning
             existing_navdata_info,
             new_navdata_info: item.navdata_info,
+            backup_liveries: true, // Default to true (safe)
+            backup_config_files: true, // Default to true (safe)
+            config_file_patterns: vec!["*_prefs.txt".to_string()], // Default pattern
         }
     }
 

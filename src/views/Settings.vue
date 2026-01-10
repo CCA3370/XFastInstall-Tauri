@@ -23,8 +23,10 @@
             </div>
           </div>
 
-          <div class="relative">
-            <div class="flex items-center bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700/50 rounded-lg overflow-hidden focus-within:border-blue-500 dark:focus-within:border-blue-500 transition-colors duration-200">
+          <div class="relative pb-2">
+            <div class="flex items-center bg-gray-50 dark:bg-gray-900/50 border rounded-lg overflow-hidden focus-within:border-blue-500 dark:focus-within:border-blue-500 transition-colors duration-200"
+              :class="pathError ? 'border-red-500 dark:border-red-500' : 'border-gray-200 dark:border-gray-700/50'"
+            >
               <input
                 v-model="xplanePathInput"
                 type="text"
@@ -42,6 +44,15 @@
                 <span><AnimatedText>{{ $t('common.browse') }}</AnimatedText></span>
               </button>
             </div>
+            <!-- Error message with absolute positioning -->
+            <transition name="fade">
+              <div v-if="pathError" class="absolute left-0 top-full mt-1 text-xs text-red-500 dark:text-red-400 flex items-center space-x-1">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span>{{ pathError }}</span>
+              </div>
+            </transition>
           </div>
           
           <!-- Auto-save status -->
@@ -61,95 +72,195 @@
         </div>
       </section>
 
-      <!-- 2. Grid for Preferences & System -->
+      <!-- 2. Grid for Windows Integration & Preferences -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-        
-        <!-- Installation Preferences (Left Column) -->
-        <section class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300 flex flex-col">
-          <div class="p-4 space-y-3 flex-1">
-            <div class="flex items-center justify-between mb-2">
-              <div class="flex items-center space-x-3">
-                <div class="w-8 h-8 bg-green-100 dark:bg-green-500/10 rounded-lg flex items-center justify-center flex-shrink-0 text-green-600 dark:text-green-400">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
-                  </svg>
-                </div>
-                <div>
-                  <h3 class="text-sm font-semibold text-gray-900 dark:text-white"><AnimatedText>{{ $t('settings.installPreferences') }}</AnimatedText></h3>
-                </div>
-              </div>
-              <!-- Master Toggle -->
-              <button
-                @click="toggleAllPreferences"
-                class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none flex-shrink-0"
-                :class="allPreferencesEnabled ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'"
-                :title="$t('settings.toggleAll')"
-              >
-                <span
-                  class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform duration-200 shadow-sm"
-                  :class="allPreferencesEnabled ? 'translate-x-4.5' : 'translate-x-0.5'"
-                />
-              </button>
-            </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <div v-for="type in addonTypes" :key="type" class="flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-900/30 border border-gray-100 dark:border-white/5">
-                <span class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate mr-2" :title="getTypeName(type)">{{ getTypeName(type) }}</span>
-                <button 
-                  @click="store.togglePreference(type)"
-                  class="relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 focus:outline-none flex-shrink-0"
-                  :class="store.installPreferences[type] ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'"
+        <!-- Windows Integration (Left Column, Windows only) -->
+        <transition name="slide-up">
+          <section v-if="isWindows" class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300">
+            <div class="p-4">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                  <div class="w-8 h-8 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0 text-gray-600 dark:text-gray-300">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white"><AnimatedText>{{ $t('settings.windowsIntegration') }}</AnimatedText></h3>
+                    <p class="text-xs text-gray-500 dark:text-gray-400"><AnimatedText>{{ $t('settings.windowsIntegrationDesc') }}</AnimatedText></p>
+                  </div>
+                </div>
+
+                <button
+                  @click="toggleContextMenu"
+                  :disabled="isProcessing"
+                  class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 focus:ring-offset-white dark:focus:ring-offset-gray-900"
+                  :class="isContextRegistered ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-700'"
                 >
                   <span
-                    class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200 shadow-sm"
-                    :class="store.installPreferences[type] ? 'translate-x-3.5' : 'translate-x-0.5'"
+                    class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform duration-300 shadow-sm"
+                    :class="isContextRegistered ? 'translate-x-4.5' : 'translate-x-0.5'"
                   />
                 </button>
               </div>
             </div>
+          </section>
+        </transition>
+
+        <!-- Placeholder for non-Windows (to maintain grid layout) -->
+        <div v-if="!isWindows"></div>
+
+        <!-- Installation Preferences (Right Column or Full Width on non-Windows) -->
+        <section class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300" :class="{ 'md:col-span-2': !isWindows }">
+          <div
+            class="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50/50 dark:hover:bg-gray-700/20 transition-colors rounded-t-xl"
+            @click="preferencesExpanded = !preferencesExpanded"
+          >
+            <div class="flex items-center space-x-3">
+              <div class="w-8 h-8 bg-green-100 dark:bg-green-500/10 rounded-lg flex items-center justify-center flex-shrink-0 text-green-600 dark:text-green-400">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white"><AnimatedText>{{ $t('settings.installPreferences') }}</AnimatedText></h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400"><AnimatedText>{{ $t('settings.installPreferencesDesc') }}</AnimatedText></p>
+              </div>
+            </div>
+
+            <!-- Expand/Collapse indicator -->
+            <svg
+              class="w-5 h-5 text-gray-400 dark:text-gray-500 transition-transform duration-200"
+              :class="{ 'rotate-180': preferencesExpanded }"
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            </svg>
           </div>
-        </section>
 
-        <!-- System & About Column (Right Column) -->
-        <div class="flex flex-col gap-4">
+          <!-- Collapsible content -->
+          <transition name="collapse">
+            <div v-if="preferencesExpanded" class="px-4 pb-4 space-y-3">
+              <!-- Master Toggle -->
+              <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-900/30 rounded-lg border border-gray-100 dark:border-white/5">
+                <span class="text-xs font-medium text-gray-700 dark:text-gray-300"><AnimatedText>{{ $t('settings.toggleAll') }}</AnimatedText></span>
+                <button
+                  @click="toggleAllPreferences"
+                  class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none flex-shrink-0"
+                  :class="allPreferencesEnabled ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'"
+                >
+                  <span
+                    class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform duration-200 shadow-sm"
+                    :class="allPreferencesEnabled ? 'translate-x-4.5' : 'translate-x-0.5'"
+                  />
+                </button>
+              </div>
 
-          <!-- System (Windows only) -->
-          <transition name="slide-up">
-            <section v-if="isWindows" class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300">
-              <div class="p-4">
-                <div class="flex items-center justify-between">
-                  <div class="flex items-center space-x-3">
-                    <div class="w-8 h-8 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0 text-gray-600 dark:text-gray-300">
-                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
-                      </svg>
-                    </div>
-                    <div>
-                      <h3 class="text-sm font-semibold text-gray-900 dark:text-white"><AnimatedText>{{ $t('settings.windowsIntegration') }}</AnimatedText></h3>
-                      <p class="text-xs text-gray-500 dark:text-gray-400"><AnimatedText>{{ $t('settings.windowsIntegrationDesc') }}</AnimatedText></p>
-                    </div>
-                  </div>
-
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div v-for="type in addonTypes" :key="type" class="flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-900/30 border border-gray-100 dark:border-white/5">
+                  <span class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate mr-2" :title="getTypeName(type)">
+                    <AnimatedText>{{ getTypeName(type) }}</AnimatedText>
+                  </span>
                   <button
-                    @click="toggleContextMenu"
-                    :disabled="isProcessing"
-                    class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 focus:ring-offset-white dark:focus:ring-offset-gray-900"
-                    :class="isContextRegistered ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-700'"
+                    @click="store.togglePreference(type)"
+                    class="relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 focus:outline-none flex-shrink-0"
+                    :class="store.installPreferences[type] ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'"
                   >
                     <span
-                      class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform duration-300 shadow-sm"
-                      :class="isContextRegistered ? 'translate-x-4.5' : 'translate-x-0.5'"
+                      class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200 shadow-sm"
+                      :class="store.installPreferences[type] ? 'translate-x-3.5' : 'translate-x-0.5'"
                     />
                   </button>
                 </div>
               </div>
-            </section>
+            </div>
           </transition>
-
-        </div>
+        </section>
       </div>
 
-      <!-- 3. Logs Section (Collapsible) -->
+      <!-- 3. Aircraft Backup Configuration -->
+      <section class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300">
+          <div
+            class="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50/50 dark:hover:bg-gray-700/20 transition-colors rounded-t-xl"
+            @click="backupExpanded = !backupExpanded"
+          >
+            <div class="flex items-center space-x-3">
+              <div class="w-8 h-8 bg-blue-100 dark:bg-blue-500/10 rounded-lg flex items-center justify-center flex-shrink-0 text-blue-600 dark:text-blue-400">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"></path>
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+                  <AnimatedText>{{ $t('settings.aircraftBackup') }}</AnimatedText>
+                </h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                  <AnimatedText>{{ $t('settings.aircraftBackupDesc') }}</AnimatedText>
+                </p>
+              </div>
+            </div>
+
+            <!-- Expand/Collapse indicator -->
+            <svg
+              class="w-5 h-5 text-gray-400 dark:text-gray-500 transition-transform duration-200"
+              :class="{ 'rotate-180': backupExpanded }"
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            </svg>
+          </div>
+
+          <!-- Collapsible content -->
+          <transition name="collapse">
+            <div v-if="backupExpanded" class="px-4 pb-4 space-y-3">
+              <!-- Config file patterns list -->
+              <div class="space-y-2">
+                <label class="text-xs font-medium text-gray-700 dark:text-gray-300">
+                  <AnimatedText>{{ $t('settings.configFilePatterns') }}</AnimatedText>
+                </label>
+
+                <div class="space-y-1.5">
+                  <div v-for="(pattern, index) in configPatterns" :key="index"
+                       class="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-900/30 rounded-lg border border-gray-100 dark:border-white/5">
+                    <input
+                      v-model="configPatterns[index]"
+                      type="text"
+                      class="flex-1 px-2 py-1 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="*_prefs.txt"
+                    >
+                    <button
+                      @click="removePattern(index)"
+                      class="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded transition-colors"
+                      :title="$t('common.delete')"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  @click="addPattern"
+                  class="w-full px-3 py-1.5 text-xs bg-blue-50 dark:bg-blue-500/10 hover:bg-blue-100 dark:hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 rounded-lg transition-colors border border-blue-200 dark:border-blue-500/20 flex items-center justify-center gap-1"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                  </svg>
+                  <AnimatedText>{{ $t('settings.addPattern') }}</AnimatedText>
+                </button>
+
+                <!-- Help text -->
+                <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+                  <AnimatedText>{{ $t('settings.patternHelpText') }}</AnimatedText>
+                </p>
+              </div>
+            </div>
+          </transition>
+        </section>
+
+      <!-- 4. Logs Section (Collapsible) -->
       <section class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300">
         <!-- Header (clickable to expand/collapse) -->
         <div
@@ -284,12 +395,18 @@ const isWindows = ref(false)
 const isContextRegistered = ref(false)
 const isProcessing = ref(false)
 const saveStatus = ref<'saving' | 'saved' | null>(null)
+const pathError = ref<string | null>(null)
 let saveTimeout: ReturnType<typeof setTimeout> | null = null
 
 // Logs state
 const recentLogs = ref<string[]>([])
 const logPath = ref('')
 const logsExpanded = ref(false)
+
+// Config patterns state
+const configPatterns = ref<string[]>([])
+const backupExpanded = ref(false)
+const preferencesExpanded = ref(false) // Default collapsed
 
 const addonTypes = [AddonType.Aircraft, AddonType.Scenery, AddonType.SceneryLibrary, AddonType.Plugin, AddonType.Navdata]
 
@@ -336,6 +453,9 @@ onMounted(async () => {
   // Load logs
   await refreshLogs()
   logPath.value = await logger.getLogPath()
+
+  // Load config patterns
+  configPatterns.value = [...store.getConfigFilePatterns()]
 })
 
 // Cleanup timers on component unmount to prevent memory leaks
@@ -346,13 +466,37 @@ onBeforeUnmount(() => {
   }
 })
 
-// Auto-save logic
-watch(xplanePathInput, (newValue) => {
+// Auto-save logic with path validation
+watch(xplanePathInput, async (newValue) => {
   if (saveTimeout) clearTimeout(saveTimeout)
-  
-  // Only save if different from store and not empty (or allow empty to clear)
+
+  // Clear previous error
+  pathError.value = null
+
+  // Only save if different from store
   if (newValue !== store.xplanePath) {
     saveStatus.value = 'saving'
+
+    // If path is not empty, validate it
+    if (newValue.trim() !== '') {
+      try {
+        const isValid = await invoke<boolean>('validate_xplane_path', { path: newValue })
+        if (!isValid) {
+          // Check if path exists first
+          const exists = await invoke<boolean>('check_path_exists', { path: newValue })
+          if (!exists) {
+            pathError.value = t('settings.pathNotExist')
+          } else {
+            pathError.value = t('settings.notValidXplanePath')
+          }
+          saveStatus.value = null
+          return
+        }
+      } catch (error) {
+        console.error('Failed to validate path:', error)
+      }
+    }
+
     saveTimeout = setTimeout(() => {
       store.setXplanePath(newValue)
       saveStatus.value = 'saved'
@@ -362,6 +506,23 @@ watch(xplanePathInput, (newValue) => {
     }, 800) // 800ms debounce
   }
 })
+
+// Watch config patterns and save to store
+watch(configPatterns, (newPatterns) => {
+  // Filter out empty patterns
+  const filtered = newPatterns.filter(p => p.trim() !== '')
+  store.setConfigFilePatterns(filtered)
+}, { deep: true })
+
+// Add a new pattern
+function addPattern() {
+  configPatterns.value.push('')
+}
+
+// Remove a pattern by index
+function removePattern(index: number) {
+  configPatterns.value.splice(index, 1)
+}
 
 async function selectFolder() {
   try {

@@ -4,6 +4,8 @@ import type { InstallProgress } from '@/types'
 
 export const useProgressStore = defineStore('progress', () => {
   const progress = ref<InstallProgress | null>(null)
+  let rafId: number | null = null
+  let pendingUpdate: InstallProgress | null = null
 
   const formatted = computed(() => {
     if (!progress.value) {
@@ -28,10 +30,31 @@ export const useProgressStore = defineStore('progress', () => {
   })
 
   function update(p: InstallProgress) {
-    progress.value = p
+    // Store the pending update
+    pendingUpdate = p
+
+    // If there's already a scheduled update, don't schedule another
+    if (rafId !== null) {
+      return
+    }
+
+    // Schedule update on next animation frame for smooth rendering
+    rafId = requestAnimationFrame(() => {
+      if (pendingUpdate) {
+        progress.value = pendingUpdate
+        pendingUpdate = null
+      }
+      rafId = null
+    })
   }
 
   function reset() {
+    // Cancel any pending animation frame
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId)
+      rafId = null
+    }
+    pendingUpdate = null
     progress.value = null
   }
 

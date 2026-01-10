@@ -34,6 +34,12 @@ export const useAppStore = defineStore('app', () => {
   // Task enabled state per task (taskId -> enabled), default all enabled
   const taskEnabledState = ref<Record<string, boolean>>({})
 
+  // Backup settings per task (taskId -> { liveries: boolean, configFiles: boolean })
+  const backupSettings = ref<Record<string, { liveries: boolean, configFiles: boolean }>>({})
+
+  // Config file patterns for backup (stored in localStorage)
+  const configFilePatterns = ref<string[]>(['*_prefs.txt'])
+
   // Check if any task has conflicts
   const hasConflicts = computed(() => {
     return currentTasks.value.some(task => task.conflictExists === true)
@@ -75,6 +81,16 @@ export const useAppStore = defineStore('app', () => {
     logLevel.value = savedLogLevel as LogLevel
   }
 
+  // Load config file patterns
+  const savedPatterns = localStorage.getItem('configFilePatterns')
+  if (savedPatterns) {
+    try {
+      configFilePatterns.value = JSON.parse(savedPatterns)
+    } catch (e) {
+      console.error('Failed to parse config file patterns', e)
+    }
+  }
+
   function setXplanePath(path: string) {
     xplanePath.value = path
     localStorage.setItem('xplanePath', path)
@@ -100,13 +116,17 @@ export const useAppStore = defineStore('app', () => {
 
   function setCurrentTasks(tasks: InstallTask[]) {
     currentTasks.value = tasks
-    // Reset overwrite settings, size confirmations, and enable all tasks by default
+    // Reset overwrite settings, size confirmations, backup settings, and enable all tasks by default
     overwriteSettings.value = {}
     sizeConfirmations.value = {}
     taskEnabledState.value = {}
-    // Enable all tasks by default
+    backupSettings.value = {}
+    // Enable all tasks by default and initialize backup settings for Aircraft
     tasks.forEach(task => {
       taskEnabledState.value[task.id] = true
+      if (task.type === AddonType.Aircraft) {
+        backupSettings.value[task.id] = { liveries: true, configFiles: true }
+      }
     })
   }
 
@@ -115,6 +135,7 @@ export const useAppStore = defineStore('app', () => {
     overwriteSettings.value = {}
     sizeConfirmations.value = {}
     taskEnabledState.value = {}
+    backupSettings.value = {}
   }
 
   // Set overwrite for a specific task
@@ -136,12 +157,15 @@ export const useAppStore = defineStore('app', () => {
     return overwriteSettings.value[taskId] ?? false
   }
 
-  // Prepare tasks with overwrite and size confirmation settings for installation
+  // Prepare tasks with overwrite, size confirmation, and backup settings for installation
   function getTasksWithOverwrite(): InstallTask[] {
     return currentTasks.value.map(task => ({
       ...task,
       shouldOverwrite: overwriteSettings.value[task.id] ?? false,
-      sizeConfirmed: sizeConfirmations.value[task.id] ?? false
+      sizeConfirmed: sizeConfirmations.value[task.id] ?? false,
+      backupLiveries: backupSettings.value[task.id]?.liveries ?? true,
+      backupConfigFiles: backupSettings.value[task.id]?.configFiles ?? true,
+      configFilePatterns: configFilePatterns.value,
     }))
   }
 
@@ -179,6 +203,27 @@ export const useAppStore = defineStore('app', () => {
     for (const task of currentTasks.value) {
       taskEnabledState.value[task.id] = enabled
     }
+  }
+
+  // Set backup settings for a specific task
+  function setTaskBackupSettings(taskId: string, liveries: boolean, configFiles: boolean) {
+    backupSettings.value[taskId] = { liveries, configFiles }
+  }
+
+  // Get backup settings for a task (default both true)
+  function getTaskBackupSettings(taskId: string): { liveries: boolean, configFiles: boolean } {
+    return backupSettings.value[taskId] ?? { liveries: true, configFiles: true }
+  }
+
+  // Set config file patterns
+  function setConfigFilePatterns(patterns: string[]) {
+    configFilePatterns.value = patterns
+    localStorage.setItem('configFilePatterns', JSON.stringify(patterns))
+  }
+
+  // Get config file patterns
+  function getConfigFilePatterns(): string[] {
+    return configFilePatterns.value
   }
 
   // Set pending CLI args for Home.vue to process
@@ -222,6 +267,10 @@ export const useAppStore = defineStore('app', () => {
     setTaskEnabled,
     getTaskEnabled,
     setAllTasksEnabled,
+    setTaskBackupSettings,
+    getTaskBackupSettings,
+    setConfigFilePatterns,
+    getConfigFilePatterns,
     setPendingCliArgs,
     clearPendingCliArgs,
   }

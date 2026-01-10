@@ -44,13 +44,22 @@ cd src-tauri && cargo test -- --nocapture
 The backend includes several performance optimizations:
 
 - **Archive Metadata Caching** (cache.rs): Thread-safe DashMap cache with 5-minute TTL
-  - Caches uncompressed sizes and file counts
+  - Caches uncompressed sizes
   - Reduces repeated archive scanning
   - Tracks cache hit/miss rates
-- **Optimized File I/O** (installer.rs): 1MB buffer size for 2-3x faster file copying
+- **Optimized File I/O** (installer.rs): 4MB buffer size for maximum throughput
+- **Parallel ZIP Extraction** (installer.rs): Multi-threaded ZIP decompression
+  - Each thread opens its own ZipArchive instance for parallel file extraction
+  - Significantly speeds up large ZIP files on multi-core systems
+  - Works with both encrypted and unencrypted ZIP files
+- **Parallel File Copying** (installer.rs): Uses rayon to copy multiple files simultaneously on multi-core systems
+  - Significantly speeds up 7z/RAR extraction (which extracts to temp then copies)
+  - Parallel directory copying for direct folder installations
+- **Async Command Execution** (lib.rs): All Tauri commands run in background thread pool via tokio
+  - Prevents UI blocking during long operations
+  - Uses `tokio::task::spawn_blocking` for CPU-intensive tasks
 - **Directory Scan Limits** (scanner.rs): Max depth of 15 levels to prevent excessive recursion
-- **Performance Monitoring** (performance.rs): Built-in metrics for throughput and cache efficiency
-- **Parallel Processing** (analyzer.rs): Uses rayon for concurrent path scanning
+- **Parallel Path Scanning** (analyzer.rs): Uses rayon for concurrent path analysis
 
 ### Rust Backend Structure
 

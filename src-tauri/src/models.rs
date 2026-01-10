@@ -59,6 +59,12 @@ pub struct InstallTask {
     /// For Navdata: new cycle info to be installed
     #[serde(skip_serializing_if = "Option::is_none")]
     pub new_navdata_info: Option<NavdataInfo>,
+    /// Whether to backup liveries during clean install (Aircraft only)
+    pub backup_liveries: bool,
+    /// Whether to backup configuration files during clean install (Aircraft only)
+    pub backup_config_files: bool,
+    /// Glob patterns for config files to backup (Aircraft only)
+    pub config_file_patterns: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

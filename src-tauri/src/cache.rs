@@ -7,7 +7,6 @@ use std::time::{Duration, SystemTime};
 #[derive(Clone, Debug)]
 pub struct ArchiveMetadata {
     pub uncompressed_size: u64,
-    pub file_count: usize,
     pub cached_at: SystemTime,
 }
 
@@ -43,48 +42,14 @@ pub fn get_cached_metadata(path: &Path) -> Option<ArchiveMetadata> {
 }
 
 /// Store metadata in cache
-pub fn cache_metadata(path: &Path, uncompressed_size: u64, file_count: usize) {
+pub fn cache_metadata(path: &Path, uncompressed_size: u64, _file_count: usize) {
     let key = path.to_string_lossy().to_string();
     let metadata = ArchiveMetadata {
         uncompressed_size,
-        file_count,
         cached_at: SystemTime::now(),
     };
 
     ARCHIVE_CACHE.insert(key, metadata);
-}
-
-/// Clear expired cache entries
-pub fn cleanup_cache() {
-    ARCHIVE_CACHE.retain(|_, metadata| {
-        if let Ok(elapsed) = metadata.cached_at.elapsed() {
-            elapsed < CACHE_TTL
-        } else {
-            false
-        }
-    });
-}
-
-/// Clear all cache entries
-pub fn clear_cache() {
-    ARCHIVE_CACHE.clear();
-}
-
-/// Get cache statistics
-pub fn get_cache_stats() -> (usize, usize) {
-    let total = ARCHIVE_CACHE.len();
-    let expired = ARCHIVE_CACHE
-        .iter()
-        .filter(|entry| {
-            if let Ok(elapsed) = entry.value().cached_at.elapsed() {
-                elapsed >= CACHE_TTL
-            } else {
-                true
-            }
-        })
-        .count();
-
-    (total, expired)
 }
 
 #[cfg(test)]
@@ -106,7 +71,6 @@ mod tests {
         // Should retrieve cached data
         let cached = get_cached_metadata(&path).unwrap();
         assert_eq!(cached.uncompressed_size, 1000);
-        assert_eq!(cached.file_count, 10);
     }
 
     #[test]
@@ -116,7 +80,6 @@ mod tests {
         // Cache with old timestamp
         let old_metadata = ArchiveMetadata {
             uncompressed_size: 500,
-            file_count: 5,
             cached_at: SystemTime::now() - Duration::from_secs(400), // Older than TTL
         };
 

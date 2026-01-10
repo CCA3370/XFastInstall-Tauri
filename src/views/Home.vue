@@ -1,12 +1,12 @@
 <template>
-  <div class="home-view h-full flex flex-col p-4 animate-fade-in relative overflow-hidden">
+  <div class="home-view h-full flex flex-col p-6 animate-fade-in relative overflow-hidden">
     <!-- Background Decor (Dark Mode Only for deep glow) -->
     <div class="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0 opacity-0 dark:opacity-100 transition-opacity duration-500">
       <div class="absolute top-1/4 left-1/4 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl"></div>
       <div class="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl"></div>
     </div>
 
-    <div class="w-full max-w-3xl mx-auto z-10 flex flex-col flex-1 min-h-0 gap-3">
+    <div class="w-full z-10 flex flex-col flex-1 min-h-0 gap-3">
       <!-- Warning Alert (Compact) -->
       <transition name="slide-down">
         <div
@@ -35,16 +35,13 @@
       </transition>
 
       <!-- Main Action Area (Flexible Height) -->
-      <div class="relative group flex-1 min-h-0 flex flex-col">
-        <!-- Drop Zone -->
-        <div
-          class="drop-zone-card flex-1 relative overflow-hidden bg-white/60 dark:bg-gray-800/40 backdrop-blur-xl border-2 border-dashed border-gray-300 dark:border-gray-600/50 rounded-2xl p-6 text-center transition-all duration-500 group-hover:border-blue-400 dark:group-hover:border-blue-500/50 group-hover:bg-white/80 dark:group-hover:bg-gray-800/60 shadow-sm dark:shadow-none flex flex-col items-center justify-center"
-          :class="{ 
-            'drag-over ring-4 ring-blue-500/20 border-blue-500 scale-[1.02]': isDragging, 
-            'animate-pulse border-blue-400': store.isAnalyzing, 
-            'debug-drop': debugDropFlash 
-          }"
-        >
+      <div class="flex-1 min-h-0 overflow-hidden bg-white/60 dark:bg-gray-800/40 backdrop-blur-xl border-2 border-dashed border-gray-300 dark:border-gray-600/50 rounded-2xl p-6 text-center transition-all duration-500 hover:border-blue-400 dark:hover:border-blue-500/50 hover:bg-white/80 dark:hover:bg-gray-800/60 shadow-sm dark:shadow-none flex flex-col items-center justify-center relative drop-zone-card"
+        :class="{
+          'drag-over ring-4 ring-blue-500/20 border-blue-500 scale-[1.02]': isDragging,
+          'animate-pulse border-blue-400': store.isAnalyzing,
+          'debug-drop': debugDropFlash
+        }"
+      >
           <!-- Hover Gradient -->
           <div class="absolute inset-0 bg-gradient-to-br from-blue-50/50 to-purple-50/50 dark:from-blue-600/5 dark:to-purple-600/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
 
@@ -95,7 +92,6 @@
               </span>
             </div>
           </div>
-        </div>
 
         <!-- Progress Overlays -->
         <transition name="fade">
@@ -122,18 +118,17 @@
               <!-- Installing State with Progress -->
               <div v-if="store.isInstalling" class="space-y-3">
                 <!-- Circular Progress -->
-                <div class="relative w-20 h-20 mx-auto">
-                  <svg class="w-full h-full -rotate-90">
+                <div class="relative w-20 h-20 mx-auto progress-container">
+                  <svg class="w-full h-full -rotate-90" style="overflow: visible;">
                     <circle cx="40" cy="40" r="36" stroke-width="5" fill="none"
                       class="text-emerald-500/20 dark:text-emerald-500/30" stroke="currentColor"/>
                     <circle cx="40" cy="40" r="36" stroke-width="5" fill="none"
-                      class="text-emerald-500 dark:text-emerald-400" stroke="currentColor"
+                      class="text-emerald-500 dark:text-emerald-400 progress-circle" stroke="currentColor"
                       :stroke-dasharray="226"
                       :stroke-dashoffset="226 - 226 * (parseFloat(progressStore.formatted.percentage) / 100)"
-                      stroke-linecap="round"
-                      style="transition: stroke-dashoffset 0.1s linear"/>
+                      stroke-linecap="round"/>
                   </svg>
-                  <span class="absolute inset-0 flex items-center justify-center text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                  <span class="absolute inset-0 flex items-center justify-center text-lg font-bold text-emerald-600 dark:text-emerald-400 progress-text">
                     {{ progressStore.formatted.percentage }}%
                   </span>
                 </div>
@@ -141,24 +136,24 @@
                 <!-- Task Info -->
                 <div class="text-center">
                   <h3 class="text-xl font-bold text-gray-900 dark:text-white"><AnimatedText>{{ $t('home.installing') }}</AnimatedText></h3>
-                  <p class="text-sm text-gray-600 dark:text-gray-300 mt-1">{{ progressStore.formatted.taskName }}</p>
-                  <p class="text-xs text-gray-400 dark:text-gray-500 truncate max-w-xs mx-auto mt-0.5">{{ progressStore.formatted.currentFile }}</p>
+                  <p class="text-sm text-gray-600 dark:text-gray-300 mt-1 transition-opacity duration-150">{{ progressStore.formatted.taskName }}</p>
+                  <p class="text-xs text-gray-400 dark:text-gray-500 truncate max-w-xs mx-auto mt-0.5 transition-opacity duration-150">{{ progressStore.formatted.currentFile }}</p>
                 </div>
 
                 <!-- Linear Progress Bar -->
                 <div class="w-full max-w-xs mx-auto">
                   <div class="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div class="h-full bg-emerald-500 dark:bg-emerald-400 transition-all duration-100 ease-linear"
+                    <div class="h-full bg-emerald-500 dark:bg-emerald-400 progress-bar"
                       :style="{ width: progressStore.formatted.percentage + '%' }"/>
                   </div>
                   <div class="flex justify-between text-xs text-gray-400 dark:text-gray-500 mt-1">
-                    <span>{{ progressStore.formatted.processedMB }} MB</span>
-                    <span>{{ progressStore.formatted.totalMB }} MB</span>
+                    <span class="progress-text">{{ progressStore.formatted.processedMB }} MB</span>
+                    <span class="progress-text">{{ progressStore.formatted.totalMB }} MB</span>
                   </div>
                 </div>
 
                 <!-- Task Progress -->
-                <p class="text-xs text-center text-gray-500 dark:text-gray-400">
+                <p class="text-xs text-center text-gray-500 dark:text-gray-400 progress-text">
                   {{ $t('home.taskProgress', { current: progressStore.formatted.taskProgress }) }}
                 </p>
               </div>
@@ -510,6 +505,7 @@ async function handleInstall() {
     logDebug('All tasks installed successfully', 'installation')
     toast.success(t('home.installationCompleted'))
     store.clearTasks()
+    progressStore.reset()
   } catch (error) {
     console.error('Installation failed:', error)
     // Non-blocking log call
@@ -517,6 +513,7 @@ async function handleInstall() {
     modal.showError(t('home.installationFailed') + ': ' + String(error))
   } finally {
     store.isInstalling = false
+    progressStore.reset()
   }
 }
 </script>
@@ -601,5 +598,42 @@ async function handleInstall() {
 /* Progress cards */
 .progress-card {
   backdrop-filter: blur(10px);
+}
+
+/* Smooth progress animations */
+.progress-container {
+  /* Add padding to prevent clipping of drop-shadow */
+  padding: 10px;
+  margin: -10px;
+  overflow: visible;
+}
+
+.progress-circle {
+  transition: stroke-dashoffset 50ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: stroke-dashoffset;
+}
+
+.progress-bar {
+  transition: width 50ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: width;
+}
+
+.progress-text {
+  transition: opacity 100ms ease-out;
+  will-change: opacity;
+}
+
+/* Optimized pulse animation with proper overflow handling */
+@keyframes progress-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 3px currentColor);
+  }
+  50% {
+    filter: drop-shadow(0 0 10px currentColor);
+  }
+}
+
+.progress-circle {
+  animation: progress-pulse 2s ease-in-out infinite;
 }
 </style>

@@ -31,6 +31,12 @@ export interface InstallTask {
   existingNavdataInfo?: NavdataInfo;
   /** For Navdata: new cycle info to be installed */
   newNavdataInfo?: NavdataInfo;
+  /** Whether to backup liveries during clean install (Aircraft only) */
+  backupLiveries?: boolean;
+  /** Whether to backup configuration files during clean install (Aircraft only) */
+  backupConfigFiles?: boolean;
+  /** Glob patterns for config files to backup (Aircraft only) */
+  configFilePatterns?: string[];
 }
 
 export interface AnalysisResult {

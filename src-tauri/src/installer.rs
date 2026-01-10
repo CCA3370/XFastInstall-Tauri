@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use glob::Pattern;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -15,6 +16,15 @@ pub const MAX_EXTRACTION_SIZE: u64 = 20 * 1024 * 1024 * 1024;
 
 /// Maximum compression ratio to detect zip bombs (100:1)
 pub const MAX_COMPRESSION_RATIO: u64 = 100;
+
+/// Check if a filename matches any of the given glob patterns
+fn matches_any_pattern(filename: &str, patterns: &[String]) -> bool {
+    patterns.iter().any(|pattern| {
+        Pattern::new(pattern)
+            .map(|p| p.matches(filename))
+            .unwrap_or(false)
+    })
+}
 
 /// Sanitize a file path to prevent path traversal attacks
 /// Returns None if the path is unsafe (contains `..` or is absolute)
@@ -36,12 +46,12 @@ pub fn sanitize_path(path: &Path) -> Option<PathBuf> {
 }
 
 /// Optimized file copy with buffering for better performance
-/// Uses a larger buffer (1MB) for faster I/O operations
+/// Uses a larger buffer (4MB) for faster I/O operations
 fn copy_file_optimized<R: std::io::Read + ?Sized, W: std::io::Write>(
     reader: &mut R,
     writer: &mut W,
 ) -> std::io::Result<u64> {
-    const BUFFER_SIZE: usize = 1024 * 1024; // 1MB buffer
+    const BUFFER_SIZE: usize = 4 * 1024 * 1024; // 4MB buffer for better performance
     let mut buffer = vec![0u8; BUFFER_SIZE];
     let mut total_bytes = 0u64;
 
@@ -55,42 +65,6 @@ fn copy_file_optimized<R: std::io::Read + ?Sized, W: std::io::Write>(
     }
 
     Ok(total_bytes)
-}
-
-/// Check if a path stays within the target directory (no escape via symlinks or ..)
-fn path_is_safe(target: &Path, path: &Path) -> bool {
-    // Canonicalize both paths to resolve symlinks and relative components
-    // If canonicalization fails, the path doesn't exist yet which is fine for new files
-    let target_canonical = match target.canonicalize() {
-        Ok(p) => p,
-        Err(_) => return true, // Target doesn't exist yet, will be created
-    };
-
-    // For the output path, check if it would be inside target
-    // Since the file doesn't exist yet, we check the parent
-    let path_to_check = if path.exists() {
-        match path.canonicalize() {
-            Ok(p) => p,
-            Err(_) => return false,
-        }
-    } else {
-        // File doesn't exist yet, check parent
-        if let Some(parent) = path.parent() {
-            if parent.exists() {
-                match parent.canonicalize() {
-                    Ok(p) => p.join(path.file_name().unwrap_or_default()),
-                    Err(_) => return false,
-                }
-            } else {
-                // Parent doesn't exist either, this is okay for nested dirs
-                return true;
-            }
-        } else {
-            return false;
-        }
-    };
-
-    path_to_check.starts_with(&target_canonical)
 }
 
 /// Remove read-only attribute from a file (Windows only)
@@ -200,10 +174,10 @@ impl ProgressContext {
     }
 
     fn emit_progress(&self, current_file: Option<String>, phase: InstallPhase) {
-        // Throttle: emit at most every 50ms
+        // Throttle: emit at most every 16ms (60fps for smooth animation)
         let mut last = self.last_emit.lock().unwrap();
         let now = Instant::now();
-        if now.duration_since(*last).as_millis() < 50 {
+        if now.duration_since(*last).as_millis() < 16 {
             return;
         }
         *last = now;
@@ -397,11 +371,14 @@ impl Installer {
                 .context(format!("Failed to create target directory: {:?}", parent))?;
         }
 
-        // Handle overwrite logic if enabled and target exists
-        if task.should_overwrite && target.exists() {
-            self.handle_overwrite_with_progress(task, source, target, ctx, password)?;
+        // Handle installation based on overwrite mode
+        // should_overwrite = false (default): Clean install - delete old folder first
+        // should_overwrite = true: Direct overwrite - keep existing files and overwrite
+        if !task.should_overwrite && target.exists() {
+            // Clean install mode: delete old folder first
+            self.handle_clean_install_with_progress(task, source, target, ctx, password)?;
         } else {
-            // Normal installation
+            // Direct overwrite mode: just install/extract files directly
             self.install_content_with_progress(source, target, task.archive_internal_root.as_deref(), ctx, password)?;
         }
 
@@ -427,8 +404,9 @@ impl Installer {
         Ok(())
     }
 
-    /// Handle overwrite with progress tracking
-    fn handle_overwrite_with_progress(
+    /// Handle clean install with progress tracking
+    /// Deletes old folder first, then installs fresh
+    fn handle_clean_install_with_progress(
         &self,
         task: &InstallTask,
         source: &Path,
@@ -438,17 +416,21 @@ impl Installer {
     ) -> Result<()> {
         match task.addon_type {
             AddonType::Aircraft => {
-                self.handle_aircraft_overwrite_with_progress(
+                // For Aircraft: backup liveries and prefs, delete, install, restore
+                self.handle_aircraft_clean_install_with_progress(
                     source,
                     target,
                     task.archive_internal_root.as_deref(),
                     ctx,
                     password,
+                    task.backup_liveries,
+                    task.backup_config_files,
+                    &task.config_file_patterns,
                 )?;
             }
             AddonType::Navdata => {
                 // For Navdata: DON'T delete Custom Data folder!
-                // Just extract and overwrite individual files
+                // Just extract and overwrite individual files (same as direct overwrite)
                 self.install_content_with_progress(source, target, task.archive_internal_root.as_deref(), ctx, password)?;
             }
             _ => {
@@ -463,17 +445,20 @@ impl Installer {
         Ok(())
     }
 
-    /// Aircraft overwrite with progress tracking
-    fn handle_aircraft_overwrite_with_progress(
+    /// Aircraft clean install with progress tracking
+    fn handle_aircraft_clean_install_with_progress(
         &self,
         source: &Path,
         target: &Path,
         internal_root: Option<&str>,
         ctx: &ProgressContext,
         password: Option<&str>,
+        backup_liveries: bool,
+        backup_config_files: bool,
+        config_patterns: &[String],
     ) -> Result<()> {
         // Step 1: Create backup of important files
-        let backup = self.backup_aircraft_data(target)?;
+        let backup = self.backup_aircraft_data(target, backup_liveries, backup_config_files, config_patterns)?;
 
         // Step 2: VERIFY backup is complete and valid BEFORE deleting
         if let Some(ref backup_data) = backup {
@@ -526,8 +511,14 @@ impl Installer {
         Ok(())
     }
 
-    /// Backup aircraft liveries folder and pref files
-    fn backup_aircraft_data(&self, target: &Path) -> Result<Option<AircraftBackup>> {
+    /// Backup aircraft liveries folder and config files
+    fn backup_aircraft_data(
+        &self,
+        target: &Path,
+        backup_liveries: bool,
+        backup_config_files: bool,
+        config_patterns: &[String],
+    ) -> Result<Option<AircraftBackup>> {
         if !target.exists() {
             return Ok(None);
         }
@@ -545,33 +536,37 @@ impl Installer {
             original_pref_sizes: Vec::new(),
         };
 
-        // Backup liveries folder (root level only)
-        let liveries_src = target.join("liveries");
-        if liveries_src.exists() && liveries_src.is_dir() {
-            // Record original info for verification
-            let original_info = self.get_directory_info(&liveries_src)?;
-            backup.original_liveries_info = Some(original_info);
+        // Backup liveries folder (root level only) if enabled
+        if backup_liveries {
+            let liveries_src = target.join("liveries");
+            if liveries_src.exists() && liveries_src.is_dir() {
+                // Record original info for verification
+                let original_info = self.get_directory_info(&liveries_src)?;
+                backup.original_liveries_info = Some(original_info);
 
-            let liveries_dst = temp_dir.join("liveries");
-            self.copy_directory(&liveries_src, &liveries_dst)
-                .context("Failed to backup liveries folder")?;
-            backup.liveries_path = Some(liveries_dst);
+                let liveries_dst = temp_dir.join("liveries");
+                self.copy_directory(&liveries_src, &liveries_dst)
+                    .context("Failed to backup liveries folder")?;
+                backup.liveries_path = Some(liveries_dst);
+            }
         }
 
-        // Backup *_prefs.txt files from root directory only
-        for entry in fs::read_dir(target)? {
-            let entry = entry?;
-            let path = entry.path();
+        // Backup config files from root directory only if enabled
+        if backup_config_files && !config_patterns.is_empty() {
+            for entry in fs::read_dir(target)? {
+                let entry = entry?;
+                let path = entry.path();
 
-            if path.is_file() {
-                if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                    if name.ends_with("_prefs.txt") {
-                        let original_size = fs::metadata(&path)?.len();
-                        let backup_path = temp_dir.join(name);
-                        fs::copy(&path, &backup_path)
-                            .context(format!("Failed to backup {}", name))?;
-                        backup.pref_files.push((name.to_string(), backup_path.clone()));
-                        backup.original_pref_sizes.push((name.to_string(), original_size));
+                if path.is_file() {
+                    if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+                        if matches_any_pattern(name, config_patterns) {
+                            let original_size = fs::metadata(&path)?.len();
+                            let backup_path = temp_dir.join(name);
+                            fs::copy(&path, &backup_path)
+                                .context(format!("Failed to backup {}", name))?;
+                            backup.pref_files.push((name.to_string(), backup_path.clone()));
+                            backup.original_pref_sizes.push((name.to_string(), original_size));
+                        }
                     }
                 }
             }
@@ -763,6 +758,7 @@ impl Installer {
     }
 
     /// Copy a directory recursively with progress tracking
+    /// Uses parallel processing for better performance on multi-core systems
     fn copy_directory_with_progress(
         &self,
         source: &Path,
@@ -773,18 +769,32 @@ impl Installer {
             fs::create_dir_all(target)?;
         }
 
-        for entry in walkdir::WalkDir::new(source).follow_links(false) {
-            let entry = entry?;
-            let source_path = entry.path();
-            let relative = source_path.strip_prefix(source)?;
-            let target_path = target.join(relative);
+        // Collect all entries first
+        let entries: Vec<_> = walkdir::WalkDir::new(source)
+            .follow_links(false)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .collect();
 
+        // Create all directories first (must be sequential)
+        for entry in &entries {
             if entry.file_type().is_dir() {
+                let relative = entry.path().strip_prefix(source)
+                    .context("Failed to strip prefix")?;
+                let target_path = target.join(relative);
                 fs::create_dir_all(&target_path)?;
-            } else {
-                if let Some(parent) = target_path.parent() {
-                    fs::create_dir_all(parent)?;
-                }
+            }
+        }
+
+        // Copy files in parallel using rayon
+        use rayon::prelude::*;
+
+        entries.par_iter()
+            .filter(|entry| entry.file_type().is_file())
+            .try_for_each(|entry| -> Result<()> {
+                let source_path = entry.path();
+                let relative = source_path.strip_prefix(source)?;
+                let target_path = target.join(relative);
 
                 let file_size = entry.metadata()?.len();
                 let file_name = source_path
@@ -793,16 +803,21 @@ impl Installer {
                     .unwrap_or("unknown")
                     .to_string();
 
-                fs::copy(source_path, &target_path)
-                    .context(format!("Failed to copy {:?}", source_path))?;
+                // Use optimized buffered copy
+                let mut source_file = fs::File::open(source_path)
+                    .context(format!("Failed to open source file {:?}", source_path))?;
+                let mut target_file = fs::File::create(&target_path)
+                    .context(format!("Failed to create target file {:?}", target_path))?;
+                copy_file_optimized(&mut source_file, &mut target_file)?;
 
                 // Remove read-only attribute from copied file to avoid future deletion issues
                 let _ = remove_readonly_attribute(&target_path);
 
                 ctx.add_bytes(file_size);
                 ctx.emit_progress(Some(file_name), InstallPhase::Installing);
-            }
-        }
+
+                Ok(())
+            })?;
 
         Ok(())
     }
@@ -833,6 +848,7 @@ impl Installer {
 
     /// Extract ZIP archive with progress tracking
     /// Supports password-protected ZIP files (both ZipCrypto and AES encryption)
+    /// Uses parallel extraction for better performance on multi-core systems
     fn extract_zip_with_progress(
         &self,
         archive_path: &Path,
@@ -842,56 +858,75 @@ impl Installer {
         password: Option<&str>,
     ) -> Result<()> {
         use zip::ZipArchive;
+        use std::sync::Arc;
 
+        // Open archive and collect file metadata
         let file = fs::File::open(archive_path)?;
         let mut archive = ZipArchive::new(file)?;
 
         let internal_root_normalized = internal_root.map(|s| s.replace('\\', "/"));
         let prefix = internal_root_normalized.as_deref();
-        let password_bytes = password.map(|p| p.as_bytes());
+        let password_bytes = password.map(|p| p.as_bytes().to_vec());
 
-        for i in 0..archive.len() {
-            // Get file info first
-            let (file_path, is_encrypted, is_dir) = {
-                let file = archive.by_index(i)?;
-                let path = match file.enclosed_name() {
-                    Some(path) => path.to_path_buf(),
-                    None => continue, // Skip paths that would escape
+        // Collect all file entries with their metadata
+        let entries: Vec<_> = (0..archive.len())
+            .filter_map(|i| {
+                let file = archive.by_index(i).ok()?;
+                let path = file.enclosed_name()?.to_path_buf();
+                let file_path_str = path.to_string_lossy().replace('\\', "/");
+
+                // Check prefix filter
+                let relative_path = if let Some(prefix) = prefix {
+                    if !file_path_str.starts_with(prefix) {
+                        return None;
+                    }
+                    let stripped = file_path_str
+                        .strip_prefix(prefix)
+                        .unwrap_or(&file_path_str)
+                        .trim_start_matches('/');
+                    if stripped.is_empty() {
+                        return None;
+                    }
+                    sanitize_path(Path::new(stripped))?
+                } else {
+                    sanitize_path(&path)?
                 };
-                (path, file.encrypted(), file.is_dir())
-            };
 
-            let file_path_str = file_path.to_string_lossy().replace('\\', "/");
+                Some((i, relative_path, file.is_dir(), file.encrypted(), file.size()))
+            })
+            .collect();
 
-            let relative_path = if let Some(prefix) = prefix {
-                if !file_path_str.starts_with(prefix) {
-                    continue;
-                }
-                let stripped = file_path_str
-                    .strip_prefix(prefix)
-                    .unwrap_or(&file_path_str)
-                    .trim_start_matches('/');
-                if stripped.is_empty() {
-                    continue;
-                }
-                // Additional sanitization for the stripped path
-                match sanitize_path(Path::new(stripped)) {
-                    Some(p) => p,
-                    None => continue, // Skip unsafe paths
-                }
-            } else {
-                // Additional sanitization check
-                match sanitize_path(&file_path) {
-                    Some(p) => p,
-                    None => continue,
-                }
-            };
+        drop(archive); // Close the archive before parallel processing
 
-            let outpath = target.join(&relative_path);
+        // Create all directories first (sequential)
+        let file = fs::File::open(archive_path)?;
+        let archive = ZipArchive::new(file)?;
 
-            if is_dir {
+        for (_index, relative_path, is_dir, _, _) in &entries {
+            if *is_dir {
+                let outpath = target.join(relative_path);
                 fs::create_dir_all(&outpath)?;
-            } else {
+            }
+        }
+
+        drop(archive);
+
+        // Extract files in parallel
+        use rayon::prelude::*;
+
+        let archive_path = archive_path.to_path_buf();
+        let target = target.to_path_buf();
+        let password_bytes = Arc::new(password_bytes);
+
+        entries.par_iter()
+            .filter(|(_, _, is_dir, _, _)| !is_dir)
+            .try_for_each(|(index, relative_path, _, is_encrypted, _)| -> Result<()> {
+                // Each thread opens its own ZipArchive instance
+                let file = fs::File::open(&archive_path)?;
+                let mut archive = ZipArchive::new(file)?;
+
+                let outpath = target.join(relative_path);
+
                 if let Some(p) = outpath.parent() {
                     if !p.exists() {
                         fs::create_dir_all(p)?;
@@ -899,30 +934,27 @@ impl Installer {
                 }
 
                 // Extract file with or without password
-                let file_size = if is_encrypted {
-                    if let Some(pwd) = password_bytes {
-                        match archive.by_index_decrypt(i, pwd) {
+                let file_size = if *is_encrypted {
+                    if let Some(ref pwd) = password_bytes.as_ref() {
+                        match archive.by_index_decrypt(*index, pwd) {
                             Ok(mut file) => {
                                 let size = file.size();
                                 let mut outfile = fs::File::create(&outpath)?;
                                 copy_file_optimized(&mut file, &mut outfile)?;
                                 size
                             }
-                            Err(_) => {
-                                return Err(anyhow::anyhow!(
-                                    "Wrong password for encrypted file in ZIP: {}",
-                                    file_path_str
-                                ));
+                            Err(e) => {
+                                return Err(e.into());
                             }
                         }
                     } else {
                         return Err(anyhow::anyhow!(
                             "Password required for encrypted file: {}",
-                            file_path_str
+                            relative_path.display()
                         ));
                     }
                 } else {
-                    let mut file = archive.by_index(i)?;
+                    let mut file = archive.by_index(*index)?;
                     let size = file.size();
                     let mut outfile = fs::File::create(&outpath)?;
                     copy_file_optimized(&mut file, &mut outfile)?;
@@ -937,18 +969,18 @@ impl Installer {
 
                 ctx.add_bytes(file_size);
                 ctx.emit_progress(Some(file_name), InstallPhase::Installing);
-            }
 
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                // Get unix mode from the file
-                let file = archive.by_index(i)?;
-                if let Some(mode) = file.unix_mode() {
-                    fs::set_permissions(&outpath, fs::Permissions::from_mode(mode))?;
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let file = archive.by_index(*index)?;
+                    if let Some(mode) = file.unix_mode() {
+                        fs::set_permissions(&outpath, fs::Permissions::from_mode(mode))?;
+                    }
                 }
-            }
-        }
+
+                Ok(())
+            })?;
 
         Ok(())
     }

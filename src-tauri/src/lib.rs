@@ -26,21 +26,34 @@ fn get_platform() -> String {
 }
 
 #[tauri::command]
-fn analyze_addons(
+async fn analyze_addons(
     paths: Vec<String>,
     xplane_path: String,
     passwords: Option<HashMap<String, String>>,
 ) -> Result<AnalysisResult, String> {
-    let analyzer = Analyzer::new();
-    Ok(analyzer.analyze(paths, &xplane_path, passwords))
+    // Run the analysis in a blocking thread pool to avoid blocking the async runtime
+    tokio::task::spawn_blocking(move || {
+        let analyzer = Analyzer::new();
+        Ok(analyzer.analyze(paths, &xplane_path, passwords))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
-fn install_addons(app_handle: tauri::AppHandle, tasks: Vec<InstallTask>) -> Result<(), String> {
-    let installer = Installer::new(app_handle);
-    installer
-        .install(tasks)
-        .map_err(|e| format!("Installation failed: {}", e))
+async fn install_addons(app_handle: tauri::AppHandle, tasks: Vec<InstallTask>) -> Result<(), String> {
+    // Clone app_handle for the blocking task
+    let app_handle_clone = app_handle.clone();
+
+    // Run the installation in a blocking thread pool to avoid blocking the async runtime
+    tokio::task::spawn_blocking(move || {
+        let installer = Installer::new(app_handle_clone);
+        installer
+            .install(tasks)
+            .map_err(|e| format!("Installation failed: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
@@ -120,6 +133,38 @@ fn set_log_locale(locale: String) {
     logger::set_locale(&locale);
 }
 
+#[tauri::command]
+fn check_path_exists(path: String) -> bool {
+    std::path::Path::new(&path).exists()
+}
+
+#[tauri::command]
+fn validate_xplane_path(path: String) -> Result<bool, String> {
+    let path_obj = std::path::Path::new(&path);
+
+    // Check if path exists
+    if !path_obj.exists() {
+        return Ok(false);
+    }
+
+    // Check if it's a directory
+    if !path_obj.is_dir() {
+        return Ok(false);
+    }
+
+    // Check for X-Plane executable
+    let exe_name = if cfg!(target_os = "windows") {
+        "X-Plane.exe"
+    } else if cfg!(target_os = "macos") {
+        "X-Plane.app"
+    } else {
+        "X-Plane"
+    };
+
+    let exe_path = path_obj.join(exe_name);
+    Ok(exe_path.exists())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -137,7 +182,9 @@ pub fn run() {
             get_log_path,
             get_all_logs,
             open_log_folder,
-            set_log_locale
+            set_log_locale,
+            check_path_exists,
+            validate_xplane_path
         ])
         .setup(|app| {
             // Log application startup

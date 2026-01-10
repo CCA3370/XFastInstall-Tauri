@@ -433,11 +433,12 @@ impl Scanner {
                     if let Some(pwd) = password_bytes {
                         match archive.by_index_decrypt(i, pwd) {
                             Ok(mut file) => {
+                                // Successfully decrypted
                                 file.read_to_string(&mut content)?;
                             }
-                            Err(_) => {
-                                // Wrong password
-                                return Err(anyhow::anyhow!("Wrong password for archive: {}", zip_path.display()));
+                            Err(e) => {
+                                // ZIP error (could be wrong password or other error)
+                                return Err(e.into());
                             }
                         }
                     } else {

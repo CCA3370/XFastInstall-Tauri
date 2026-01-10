@@ -195,17 +195,17 @@ onMounted(async () => {
 /* Page transitions */
 .page-enter-active,
 .page-leave-active {
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 }
 
 .page-enter-from {
   opacity: 0;
-  transform: translateX(12px);
+  transform: translateX(15px);
 }
 
 .page-leave-to {
   opacity: 0;
-  transform: translateX(-12px);
+  transform: translateX(-15px);
 }
 
 /* Navigation animations */

@@ -26,7 +26,10 @@
       "Bash(/c/Users/18811/.cargo/bin/cargo.exe check --lib)",
       "Bash(/c/Users/18811/.cargo/bin/cargo.exe test analyzer::tests --lib)",
       "WebFetch(domain:crates.io)",
-      "WebFetch(domain:lib.rs)"
+      "WebFetch(domain:lib.rs)",
+      "Bash(cargo build:*)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)"
     ]
   }
 }
