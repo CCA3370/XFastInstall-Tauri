@@ -6,7 +6,7 @@ use rayon::prelude::*;
 
 use crate::logger;
 use crate::logger::{tr, LogMsg};
-use crate::models::{AddonType, AnalysisResult, DetectedItem, InstallTask};
+use crate::models::{AddonType, AnalysisResult, DetectedItem, InstallTask, NavdataCycle, NavdataInfo};
 use crate::scanner::{Scanner, PasswordRequiredError};
 use crate::installer::{MAX_EXTRACTION_SIZE, MAX_COMPRESSION_RATIO};
 
@@ -217,6 +217,26 @@ impl Analyzer {
         }
     }
 
+    /// Read existing navdata cycle info from Custom Data/cycle.json
+    /// Returns None if file doesn't exist or can't be read (graceful degradation)
+    fn read_existing_navdata_cycle(&self, target_path: &Path) -> Option<NavdataInfo> {
+        let cycle_path = target_path.join("cycle.json");
+
+        if !cycle_path.exists() {
+            return None;
+        }
+
+        // Try to read and parse, but don't fail if it doesn't work
+        let content = fs::read_to_string(&cycle_path).ok()?;
+        let cycle: NavdataCycle = serde_json::from_str(&content).ok()?;
+
+        Some(NavdataInfo {
+            name: cycle.name,
+            cycle: cycle.cycle,
+            airac: cycle.airac,
+        })
+    }
+
     /// Create an install task from a detected item
     fn create_install_task(
         &self,
@@ -240,11 +260,26 @@ impl Analyzer {
             }
         };
 
-        // Use display_name as the target folder name
-        let target_path = target_base.join(&item.display_name);
+        // For Navdata, install directly into target_base (don't create subfolder)
+        // For other types, create a subfolder with the display_name
+        let target_path = if item.addon_type == AddonType::Navdata {
+            target_base.clone()
+        } else {
+            target_base.join(&item.display_name)
+        };
 
         // Check if target already exists
-        let conflict_exists = target_path.exists();
+        // For Navdata, check if cycle.json exists and read existing cycle info
+        let (conflict_exists, existing_navdata_info) = if item.addon_type == AddonType::Navdata {
+            let cycle_path = target_path.join("cycle.json");
+            if cycle_path.exists() {
+                (true, self.read_existing_navdata_cycle(&target_path))
+            } else {
+                (false, None)
+            }
+        } else {
+            (target_path.exists(), None)
+        };
 
         // Get password for this archive if it was provided
         let password = archive_passwords.get(&item.path).cloned();
@@ -265,6 +300,8 @@ impl Analyzer {
             estimated_size,
             size_warning,
             size_confirmed: false, // User must confirm if there's a warning
+            existing_navdata_info,
+            new_navdata_info: item.navdata_info,
         }
     }
 

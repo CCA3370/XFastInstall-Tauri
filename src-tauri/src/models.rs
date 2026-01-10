@@ -12,6 +12,17 @@ pub enum AddonType {
     Navdata,
 }
 
+/// Navdata cycle information for display
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NavdataInfo {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cycle: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub airac: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstallTask {
@@ -42,6 +53,12 @@ pub struct InstallTask {
     /// Whether user has confirmed they trust this archive (for large/suspicious archives)
     #[serde(default)]
     pub size_confirmed: bool,
+    /// For Navdata: existing cycle info (if conflict exists)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub existing_navdata_info: Option<NavdataInfo>,
+    /// For Navdata: new cycle info to be installed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_navdata_info: Option<NavdataInfo>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -71,6 +88,8 @@ pub struct DetectedItem {
     pub display_name: String,
     /// For archives: the root folder path inside the archive
     pub archive_internal_root: Option<String>,
+    /// For Navdata: cycle info from the new navdata to be installed
+    pub navdata_info: Option<NavdataInfo>,
 }
 
 /// Installation progress event sent to frontend

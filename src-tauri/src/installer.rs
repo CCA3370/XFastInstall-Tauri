@@ -366,8 +366,13 @@ impl Installer {
                     password,
                 )?;
             }
+            AddonType::Navdata => {
+                // For Navdata: DON'T delete Custom Data folder!
+                // Just extract and overwrite individual files
+                self.install_content_with_progress(source, target, task.archive_internal_root.as_deref(), ctx, password)?;
+            }
             _ => {
-                // For non-Aircraft: simple delete and reinstall
+                // For other types: simple delete and reinstall
                 if target.exists() {
                     fs::remove_dir_all(target)
                         .context(format!("Failed to delete existing folder: {:?}", target))?;

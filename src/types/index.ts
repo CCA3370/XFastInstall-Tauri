@@ -27,6 +27,10 @@ export interface InstallTask {
   sizeWarning?: string;
   /** Whether user has confirmed they trust this archive (for large/suspicious archives) */
   sizeConfirmed?: boolean;
+  /** For Navdata: existing cycle info (if conflict exists) */
+  existingNavdataInfo?: NavdataInfo;
+  /** For Navdata: new cycle info to be installed */
+  newNavdataInfo?: NavdataInfo;
 }
 
 export interface AnalysisResult {

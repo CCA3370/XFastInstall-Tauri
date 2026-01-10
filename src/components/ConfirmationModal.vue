@@ -113,6 +113,22 @@
                       <span v-else><AnimatedText>{{ $t('modal.overwriteNote') }}</AnimatedText></span>
                     </div>
                   </div>
+                  <!-- Navdata cycle comparison (only for Navdata with conflict and existing info) -->
+                  <div v-if="task.type === 'Navdata' && task.conflictExists && task.existingNavdataInfo"
+                       class="mt-1.5 p-2 bg-blue-500/10 border border-blue-500/20 rounded">
+                    <div class="flex items-center space-x-2 text-xs">
+                      <svg class="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                      </svg>
+                      <span class="text-blue-200">
+                        <AnimatedText>{{ $t('modal.existingCycle') }}</AnimatedText>:
+                        <span class="font-medium">{{ formatNavdataCycle(task.existingNavdataInfo) }}</span>
+                        <span class="mx-1.5">→</span>
+                        <AnimatedText>{{ $t('modal.newCycle') }}</AnimatedText>:
+                        <span class="font-medium">{{ formatNavdataCycle(task.newNavdataInfo) }}</span>
+                      </span>
+                    </div>
+                  </div>
                   <!-- Size warning with confirmation checkbox -->
                   <div v-if="task.sizeWarning" class="mt-1.5 p-2 bg-red-500/10 border border-red-500/20 rounded">
                     <div class="flex items-start space-x-2">
@@ -174,7 +190,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useAppStore } from '@/stores/app'
-import { AddonType } from '@/types'
+import { AddonType, NavdataInfo } from '@/types'
 import AnimatedText from '@/components/AnimatedText.vue'
 import { useI18n } from 'vue-i18n'
 
@@ -182,6 +198,16 @@ const { t } = useI18n()
 const store = useAppStore()
 
 defineEmits(['close', 'confirm'])
+
+// Format Navdata cycle for display
+function formatNavdataCycle(info: NavdataInfo | undefined): string {
+  if (!info) return t('modal.unknown')
+
+  // Prefer airac, fallback to cycle, fallback to name
+  if (info.airac) return `AIRAC ${info.airac}`
+  if (info.cycle) return `Cycle ${info.cycle}`
+  return info.name
+}
 
 // Parse size warning message to get human-readable text
 function parseSizeWarning(warning: string): { type: 'ratio' | 'size', message: string } {

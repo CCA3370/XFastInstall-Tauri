@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
-use crate::models::{AddonType, DetectedItem, NavdataCycle};
+use crate::models::{AddonType, DetectedItem, NavdataCycle, NavdataInfo};
 
 /// Error indicating that password is required for an encrypted archive
 #[derive(Debug)]
@@ -384,6 +384,7 @@ impl Scanner {
             path: install_path.to_string_lossy().to_string(),
             display_name,
             archive_internal_root: None,
+            navdata_info: None,
         }))
     }
 
@@ -434,6 +435,7 @@ impl Scanner {
             path: archive_path.to_string_lossy().to_string(),
             display_name,
             archive_internal_root: internal_root,
+            navdata_info: None,
         }))
     }
 
@@ -469,6 +471,7 @@ impl Scanner {
             path: parent.to_string_lossy().to_string(),
             display_name,
             archive_internal_root: None,
+            navdata_info: None,
         }))
     }
 
@@ -489,6 +492,7 @@ impl Scanner {
                 path: install_dir.to_string_lossy().to_string(),
                 display_name,
                 archive_internal_root: None,
+                navdata_info: None,
             }))
         } else {
             Ok(None)
@@ -555,6 +559,7 @@ impl Scanner {
             path: archive_path.to_string_lossy().to_string(),
             display_name,
             archive_internal_root: internal_root,
+            navdata_info: None,
         }))
     }
 
@@ -656,6 +661,7 @@ impl Scanner {
             path: install_path.to_string_lossy().to_string(),
             display_name,
             archive_internal_root: None,
+            navdata_info: None,
         }))
     }
 
@@ -707,6 +713,7 @@ impl Scanner {
             path: archive_path.to_string_lossy().to_string(),
             display_name,
             archive_internal_root: internal_root,
+            navdata_info: None,
         }))
     }
 
@@ -726,6 +733,13 @@ impl Scanner {
             anyhow::anyhow!("Failed to get parent directory")
         })?;
 
+        // Create NavdataInfo from parsed cycle
+        let navdata_info = NavdataInfo {
+            name: cycle.name.clone(),
+            cycle: cycle.cycle.clone(),
+            airac: cycle.airac.clone(),
+        };
+
         // Determine install path based on name
         let (install_path, display_name) = if cycle.name.contains("X-Plane") || cycle.name.contains("X-Plane 11") {
             (parent.to_path_buf(), format!("Navdata: {}", cycle.name))
@@ -740,6 +754,7 @@ impl Scanner {
             path: install_path.to_string_lossy().to_string(),
             display_name,
             archive_internal_root: None,
+            navdata_info: Some(navdata_info),
         }))
     }
 
@@ -749,6 +764,13 @@ impl Scanner {
 
         let path = PathBuf::from(file_path);
         let parent = path.parent();
+
+        // Create NavdataInfo from parsed cycle
+        let navdata_info = NavdataInfo {
+            name: cycle.name.clone(),
+            cycle: cycle.cycle.clone(),
+            airac: cycle.airac.clone(),
+        };
 
         let display_name = if cycle.name.contains("X-Plane") || cycle.name.contains("X-Plane 11") {
             format!("Navdata: {}", cycle.name)
@@ -774,6 +796,7 @@ impl Scanner {
             path: archive_path.to_string_lossy().to_string(),
             display_name,
             archive_internal_root: internal_root,
+            navdata_info: Some(navdata_info),
         }))
     }
 }

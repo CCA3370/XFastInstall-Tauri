@@ -104,7 +104,10 @@ export default {
     sizeWarningDesc: '部分压缩包存在异常的大小特征，请在安装前仔细确认。',
     suspiciousRatio: '可疑的压缩比 ({ratio}:1)，预估解压大小: {size} GB。这可能是压缩炸弹。',
     largeSize: '超大压缩包 (预估 {size} GB)，请确保有足够的磁盘空间。',
-    confirmTrustArchive: '我信任此压缩包，继续安装'
+    confirmTrustArchive: '我信任此压缩包，继续安装',
+    existingCycle: '已存在',
+    newCycle: '待安装',
+    unknown: '未知',
   },
   password: {
     title: '需要密码',

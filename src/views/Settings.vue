@@ -13,9 +13,9 @@
         <div class="p-4 space-y-3">
           <div class="flex items-center space-x-3">
             <div class="w-8 h-8 bg-blue-100 dark:bg-blue-500/10 rounded-lg flex items-center justify-center flex-shrink-0 text-blue-600 dark:text-blue-400">
-              <!-- Airplane icon -->
+              <!-- Folder icon -->
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
               </svg>
             </div>
             <div class="flex-1">
@@ -23,27 +23,25 @@
             </div>
           </div>
 
-          <div class="relative group">
-            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <span class="text-gray-400 dark:text-gray-500">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
+          <div class="relative">
+            <div class="flex items-center bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700/50 rounded-lg overflow-hidden focus-within:border-blue-500 dark:focus-within:border-blue-500 transition-colors duration-200">
+              <input
+                v-model="xplanePathInput"
+                type="text"
+                placeholder="C:\X-Plane 12"
+                class="flex-1 px-4 py-2.5 bg-transparent border-none text-sm text-gray-900 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:ring-0"
+              />
+              <button
+                type="button"
+                @click.stop.prevent="selectFolder"
+                class="px-4 py-1.5 m-1 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 text-xs font-medium rounded-md transition-colors duration-200 flex items-center space-x-1.5 flex-shrink-0 border border-gray-300 dark:border-gray-600"
+              >
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"></path>
                 </svg>
-              </span>
+                <span><AnimatedText>{{ $t('common.browse') }}</AnimatedText></span>
+              </button>
             </div>
-            <input
-              v-model="xplanePathInput"
-              type="text"
-              placeholder="C:\X-Plane 12"
-              class="w-full pl-9 pr-20 py-2 bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700/50 rounded-lg text-sm text-gray-900 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all duration-300"
-            />
-            <button
-              type="button"
-              @click.stop.prevent="selectFolder"
-              class="absolute inset-y-1 right-1 px-3 py-0.5 bg-gray-200 dark:bg-gray-700/50 hover:bg-gray-300 dark:hover:bg-gray-600/50 text-gray-700 dark:text-gray-300 text-xs rounded-md transition-colors flex items-center space-x-1 border border-transparent dark:border-white/5"
-            >
-              <span><AnimatedText>{{ $t('common.browse') }}</AnimatedText></span>
-            </button>
           </div>
           
           <!-- Auto-save status -->
@@ -118,7 +116,7 @@
           <!-- System (Windows only) -->
           <transition name="slide-up">
             <section v-if="isWindows" class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300">
-              <div class="p-4 space-y-2">
+              <div class="p-4">
                 <div class="flex items-center justify-between">
                   <div class="flex items-center space-x-3">
                     <div class="w-8 h-8 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0 text-gray-600 dark:text-gray-300">
@@ -126,7 +124,10 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
                       </svg>
                     </div>
-                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white"><AnimatedText>{{ $t('settings.windowsIntegration') }}</AnimatedText></h3>
+                    <div>
+                      <h3 class="text-sm font-semibold text-gray-900 dark:text-white"><AnimatedText>{{ $t('settings.windowsIntegration') }}</AnimatedText></h3>
+                      <p class="text-xs text-gray-500 dark:text-gray-400"><AnimatedText>{{ $t('settings.windowsIntegrationDesc') }}</AnimatedText></p>
+                    </div>
                   </div>
 
                   <button
@@ -141,7 +142,6 @@
                     />
                   </button>
                 </div>
-                <p class="text-xs text-gray-500 dark:text-gray-400 pl-11">{{ $t('settings.windowsIntegrationDesc') }}</p>
               </div>
             </section>
           </transition>

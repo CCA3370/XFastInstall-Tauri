@@ -104,7 +104,10 @@ export default {
     sizeWarningDesc: 'Some archives have unusual size characteristics. Please review and confirm before installing.',
     suspiciousRatio: 'Suspicious compression ratio ({ratio}:1). Estimated size: {size} GB. This may be a zip bomb.',
     largeSize: 'Very large archive (estimated {size} GB). Ensure you have enough disk space.',
-    confirmTrustArchive: 'I trust this archive and want to proceed'
+    confirmTrustArchive: 'I trust this archive and want to proceed',
+    existingCycle: 'Existing',
+    newCycle: 'New',
+    unknown: 'Unknown',
   },
   password: {
     title: 'Password Required',
