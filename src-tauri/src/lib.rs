@@ -13,7 +13,7 @@ use analyzer::Analyzer;
 use installer::Installer;
 use models::{AnalysisResult, InstallResult, InstallTask};
 
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 #[tauri::command]
 fn get_cli_args() -> Vec<String> {
@@ -193,7 +193,7 @@ pub fn run() {
 
                 // Bring window to front
                 if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.set_focus();
+                    let _ = window.set_focus().ok();
                 }
             }
         }))

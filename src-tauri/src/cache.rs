@@ -54,7 +54,6 @@ pub fn cache_metadata(path: &Path, uncompressed_size: u64, _file_count: usize) {
 
 /// Clear all expired cache entries
 pub fn clear_expired_entries() {
-    let now = SystemTime::now();
     ARCHIVE_CACHE.retain(|_, metadata| {
         metadata.cached_at.elapsed()
             .map(|elapsed| elapsed < CACHE_TTL)
