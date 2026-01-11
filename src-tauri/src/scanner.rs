@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -23,12 +24,10 @@ impl std::error::Error for PasswordRequiredError {}
 ///
 /// Scanner is thread-safe as it contains no mutable state.
 /// All methods are stateless and can be called concurrently.
+///
+/// Note: Scanner automatically implements Send + Sync as it's an empty struct
+/// with no internal state, so no unsafe impl is needed.
 pub struct Scanner;
-
-// Explicitly mark Scanner as Send and Sync for thread safety
-// This is safe because Scanner has no internal state
-unsafe impl Send for Scanner {}
-unsafe impl Sync for Scanner {}
 
 impl Scanner {
     pub fn new() -> Self {
@@ -79,18 +78,40 @@ impl Scanner {
     /// Scan a directory recursively
     fn scan_directory(&self, dir: &Path) -> Result<Vec<DetectedItem>> {
         let mut detected = Vec::new();
+        let mut skip_dirs: HashSet<PathBuf> = HashSet::new();
 
         // Walk through the directory with depth limit for performance
         // Most X-Plane addons are within 15 levels deep
-        for entry in WalkDir::new(dir)
+        let mut walker = WalkDir::new(dir)
             .follow_links(false)
             .max_depth(15)
-        {
+            .into_iter();
+
+        while let Some(entry) = walker.next() {
             let entry = entry?;
             let path = entry.path();
 
             // Skip ignored paths (__MACOSX, .DS_Store, etc.)
             if Self::should_ignore_path(path) {
+                if entry.file_type().is_dir() {
+                    walker.skip_current_dir();
+                }
+                continue;
+            }
+
+            // Check if path is within a detected plugin directory
+            let mut should_skip = false;
+            for skip_dir in &skip_dirs {
+                if path.starts_with(skip_dir) && path != skip_dir {
+                    should_skip = true;
+                    break;
+                }
+            }
+
+            if should_skip {
+                if entry.file_type().is_dir() {
+                    walker.skip_current_dir();
+                }
                 continue;
             }
 
@@ -99,14 +120,33 @@ impl Scanner {
             }
 
             // Check for different addon types based on file markers
+            // When detected, add the plugin root to skip_dirs to avoid scanning subdirectories
             if let Some(item) = self.check_aircraft(path, dir)? {
+                let root = PathBuf::from(&item.path);
+                skip_dirs.insert(root);
                 detected.push(item);
-            } else if let Some(item) = self.check_scenery(path, dir)? {
+                continue;
+            }
+
+            if let Some(item) = self.check_scenery(path, dir)? {
+                let root = PathBuf::from(&item.path);
+                skip_dirs.insert(root);
                 detected.push(item);
-            } else if let Some(item) = self.check_plugin(path, dir)? {
+                continue;
+            }
+
+            if let Some(item) = self.check_plugin(path, dir)? {
+                let root = PathBuf::from(&item.path);
+                skip_dirs.insert(root);
                 detected.push(item);
-            } else if let Some(item) = self.check_navdata(path, dir)? {
+                continue;
+            }
+
+            if let Some(item) = self.check_navdata(path, dir)? {
+                let root = PathBuf::from(&item.path);
+                skip_dirs.insert(root);
                 detected.push(item);
+                continue;
             }
         }
 

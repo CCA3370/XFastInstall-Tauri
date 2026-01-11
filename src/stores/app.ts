@@ -62,32 +62,51 @@ export const useAppStore = defineStore('app', () => {
     return currentTasks.value.filter(task => getTaskEnabled(task.id)).length
   })
 
-  // Load settings
+  // Load settings with validation and error recovery
   const savedPath = localStorage.getItem('xplanePath')
   if (savedPath) xplanePath.value = savedPath
 
   const savedPrefs = localStorage.getItem('installPreferences')
   if (savedPrefs) {
     try {
-      installPreferences.value = { ...installPreferences.value, ...JSON.parse(savedPrefs) }
+      const parsed = JSON.parse(savedPrefs)
+      // Validate that parsed data is an object
+      if (typeof parsed === 'object' && parsed !== null) {
+        installPreferences.value = { ...installPreferences.value, ...parsed }
+      } else {
+        console.warn('Invalid install preferences format, using defaults')
+        localStorage.removeItem('installPreferences')
+      }
     } catch (e) {
-      console.error('Failed to parse install preferences', e)
+      console.error('Failed to parse install preferences, clearing corrupted data', e)
+      localStorage.removeItem('installPreferences')
     }
   }
 
-  // Load log level
+  // Load log level with validation
   const savedLogLevel = localStorage.getItem('logLevel')
   if (savedLogLevel && ['basic', 'full', 'debug'].includes(savedLogLevel)) {
     logLevel.value = savedLogLevel as LogLevel
+  } else if (savedLogLevel) {
+    console.warn('Invalid log level, using default')
+    localStorage.removeItem('logLevel')
   }
 
-  // Load config file patterns
+  // Load config file patterns with validation
   const savedPatterns = localStorage.getItem('configFilePatterns')
   if (savedPatterns) {
     try {
-      configFilePatterns.value = JSON.parse(savedPatterns)
+      const parsed = JSON.parse(savedPatterns)
+      // Validate that parsed data is an array of strings
+      if (Array.isArray(parsed) && parsed.every(item => typeof item === 'string')) {
+        configFilePatterns.value = parsed
+      } else {
+        console.warn('Invalid config file patterns format, using defaults')
+        localStorage.removeItem('configFilePatterns')
+      }
     } catch (e) {
-      console.error('Failed to parse config file patterns', e)
+      console.error('Failed to parse config file patterns, clearing corrupted data', e)
+      localStorage.removeItem('configFilePatterns')
     }
   }
 

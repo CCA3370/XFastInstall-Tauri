@@ -18,7 +18,7 @@ pub fn register_context_menu() -> Result<()> {
     // Register for files (*)
     let (shell_key, _) = hkcu.create_subkey(r"Software\Classes\*\shell\XFastInstall")?;
     shell_key.set_value("", &"Install to X-Plane")?;
-    shell_key.set_value("Icon", &format!("{}", exe_path_str))?;
+    shell_key.set_value("Icon", &exe_path_str.to_string())?;
 
     let (command_key, _) = hkcu.create_subkey(r"Software\Classes\*\shell\XFastInstall\command")?;
     command_key.set_value("", &format!("\"{}\" \"%1\"", exe_path_str))?;
@@ -26,7 +26,7 @@ pub fn register_context_menu() -> Result<()> {
     // Register for directories
     let (dir_shell_key, _) = hkcu.create_subkey(r"Software\Classes\Directory\shell\XFastInstall")?;
     dir_shell_key.set_value("", &"Install to X-Plane")?;
-    dir_shell_key.set_value("Icon", &format!("{}", exe_path_str))?;
+    dir_shell_key.set_value("Icon", &exe_path_str.to_string())?;
 
     let (dir_command_key, _) = hkcu.create_subkey(r"Software\Classes\Directory\shell\XFastInstall\command")?;
     dir_command_key.set_value("", &format!("\"{}\" \"%1\"", exe_path_str))?;

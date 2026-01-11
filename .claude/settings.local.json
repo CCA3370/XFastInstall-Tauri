@@ -29,7 +29,8 @@
       "WebFetch(domain:lib.rs)",
       "Bash(cargo build:*)",
       "Bash(tasklist:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(cargo clippy:*)"
     ]
   }
 }

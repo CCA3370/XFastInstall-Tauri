@@ -684,6 +684,9 @@ mod tests {
                 size_confirmed: false,
                 existing_navdata_info: None,
                 new_navdata_info: None,
+                backup_liveries: true,
+                backup_config_files: true,
+                config_file_patterns: vec!["*_prefs.txt".to_string()],
             },
             InstallTask {
                 id: "2".to_string(),
@@ -700,6 +703,9 @@ mod tests {
                 size_confirmed: false,
                 existing_navdata_info: None,
                 new_navdata_info: None,
+                backup_liveries: true,
+                backup_config_files: true,
+                config_file_patterns: vec!["*_prefs.txt".to_string()],
             },
         ];
 
@@ -730,6 +736,9 @@ mod tests {
                 size_confirmed: false,
                 existing_navdata_info: None,
                 new_navdata_info: None,
+                backup_liveries: true,
+                backup_config_files: true,
+                config_file_patterns: vec!["*_prefs.txt".to_string()],
             },
             InstallTask {
                 id: "2".to_string(),
@@ -746,6 +755,9 @@ mod tests {
                 size_confirmed: false,
                 existing_navdata_info: None,
                 new_navdata_info: None,
+                backup_liveries: true,
+                backup_config_files: true,
+                config_file_patterns: vec!["*_prefs.txt".to_string()],
             },
         ];
 
@@ -776,6 +788,9 @@ mod tests {
                 size_confirmed: false,
                 existing_navdata_info: None,
                 new_navdata_info: None,
+                backup_liveries: true,
+                backup_config_files: true,
+                config_file_patterns: vec!["*_prefs.txt".to_string()],
             },
             InstallTask {
                 id: "2".to_string(),
@@ -792,6 +807,9 @@ mod tests {
                 size_confirmed: false,
                 existing_navdata_info: None,
                 new_navdata_info: None,
+                backup_liveries: true,
+                backup_config_files: true,
+                config_file_patterns: vec!["*_prefs.txt".to_string()],
             },
             InstallTask {
                 id: "3".to_string(),
@@ -808,6 +826,9 @@ mod tests {
                 size_confirmed: false,
                 existing_navdata_info: None,
                 new_navdata_info: None,
+                backup_liveries: true,
+                backup_config_files: true,
+                config_file_patterns: vec!["*_prefs.txt".to_string()],
             },
         ];
 

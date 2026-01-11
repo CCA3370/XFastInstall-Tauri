@@ -52,6 +52,26 @@ pub fn cache_metadata(path: &Path, uncompressed_size: u64, _file_count: usize) {
     ARCHIVE_CACHE.insert(key, metadata);
 }
 
+/// Clear all expired cache entries
+pub fn clear_expired_entries() {
+    let now = SystemTime::now();
+    ARCHIVE_CACHE.retain(|_, metadata| {
+        metadata.cached_at.elapsed()
+            .map(|elapsed| elapsed < CACHE_TTL)
+            .unwrap_or(false)
+    });
+}
+
+/// Clear all cache entries
+pub fn clear_all() {
+    ARCHIVE_CACHE.clear();
+}
+
+/// Get the number of cached entries
+pub fn cache_size() -> usize {
+    ARCHIVE_CACHE.len()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -98,7 +118,7 @@ mod tests {
             .map(|i| {
                 let p = path.clone();
                 thread::spawn(move || {
-                    cache_metadata(&p, i * 100, i);
+                    cache_metadata(&p, i * 100, i as usize);
                 })
             })
             .collect();

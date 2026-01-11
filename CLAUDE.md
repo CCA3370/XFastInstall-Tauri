@@ -6,6 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 XFastInstall is a cross-platform X-Plane addon installer built with Tauri 2, Rust, and Vue 3. It provides intelligent detection and installation of Aircraft, Scenery, Plugins, and Navdata addons through drag-and-drop or Windows context menu integration.
 
+## Prerequisites
+
+- Node.js 20+
+- Rust (latest stable)
+- Platform-specific build dependencies:
+  - **Linux**: `libwebkit2gtk-4.1-dev`, `build-essential`, `libssl-dev`
+  - **macOS**: Xcode Command Line Tools
+  - **Windows**: Visual Studio Build Tools
+
 ## Development Commands
 
 ```bash
@@ -24,11 +33,35 @@ npm run dev
 # Generate icon (if needed)
 npm run generate:icon
 
+# Rust development commands
+cd src-tauri
+
 # Run Rust tests
-cd src-tauri && cargo test
+cargo test
 
 # Run Rust tests with output
-cd src-tauri && cargo test -- --nocapture
+cargo test -- --nocapture
+
+# Run specific test
+cargo test test_name
+
+# Format Rust code
+cargo fmt
+
+# Check code without building
+cargo check
+
+# Run Clippy linter
+cargo clippy --all-targets --all-features
+
+# Build documentation
+cargo doc --open
+
+# Check for unused dependencies (requires cargo-udeps)
+cargo +nightly udeps
+
+# View dependency tree
+cargo tree
 ```
 
 ## Architecture Overview
@@ -113,6 +146,12 @@ The backend follows a modular pipeline architecture:
   - Records cache hit/miss rates
   - Provides performance statistics
 
+- **logger.rs**: Logging system with i18n support
+  - Thread-safe file logging with automatic rotation (3MB max, trims to 2MB)
+  - Bilingual support (English/Chinese) with locale switching
+  - Log location: `%LOCALAPPDATA%/XFastInstall/logs/xfastinstall.log` (Windows)
+  - Provides log reading and folder opening functionality
+
 ### Frontend Structure
 
 - **Views**:
@@ -146,6 +185,15 @@ All Rust functions exposed to frontend (defined in lib.rs):
 - `install_addons(tasks)`: Executes installation
 - `register_context_menu()`: Registers Windows context menu (Windows only)
 - `unregister_context_menu()`: Unregisters context menu (Windows only)
+- `is_context_menu_registered()`: Checks if context menu is registered
+- `log_from_frontend(level, message, context)`: Logs messages from frontend
+- `get_recent_logs(lines)`: Returns recent log entries
+- `get_log_path()`: Returns log file path
+- `get_all_logs()`: Returns all log content
+- `open_log_folder()`: Opens log folder in system file explorer
+- `set_log_locale(locale)`: Sets logging locale (en/zh)
+- `check_path_exists(path)`: Checks if a path exists
+- `validate_xplane_path(path)`: Validates X-Plane installation directory
 
 ### CLI Args Integration
 
