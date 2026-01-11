@@ -16,6 +16,11 @@ export const useAppStore = defineStore('app', () => {
   // Pending CLI arguments to be processed by Home.vue
   const pendingCliArgs = ref<string[] | null>(null)
 
+  // Batch processing for CLI args (to handle multiple file selections)
+  const cliArgsBatch = ref<string[]>([])
+  let cliArgsBatchTimer: ReturnType<typeof setTimeout> | null = null
+  const CLI_ARGS_BATCH_DELAY = 500 // 500ms delay to collect all files
+
   // Installation result state
   const installResult = ref<InstallResult | null>(null)
   const showCompletion = ref(false)
@@ -254,6 +259,28 @@ export const useAppStore = defineStore('app', () => {
     pendingCliArgs.value = args
   }
 
+  // Add CLI args to batch (for handling multiple file selections)
+  function addCliArgsToBatch(args: string[]) {
+    // Add new args to batch
+    cliArgsBatch.value.push(...args)
+
+    // Clear existing timer
+    if (cliArgsBatchTimer) {
+      clearTimeout(cliArgsBatchTimer)
+    }
+
+    // Set new timer to process batch after delay
+    cliArgsBatchTimer = setTimeout(() => {
+      if (cliArgsBatch.value.length > 0) {
+        // Remove duplicates
+        const uniqueArgs = Array.from(new Set(cliArgsBatch.value))
+        setPendingCliArgs(uniqueArgs)
+        cliArgsBatch.value = []
+      }
+      cliArgsBatchTimer = null
+    }, CLI_ARGS_BATCH_DELAY)
+  }
+
   // Clear pending CLI args after processing
   function clearPendingCliArgs() {
     pendingCliArgs.value = null
@@ -309,6 +336,7 @@ export const useAppStore = defineStore('app', () => {
     setConfigFilePatterns,
     getConfigFilePatterns,
     setPendingCliArgs,
+    addCliArgsToBatch,
     clearPendingCliArgs,
     setInstallResult,
     clearInstallResult,

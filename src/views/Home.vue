@@ -187,7 +187,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useToastStore } from '@/stores/toast'
 import { useModalStore } from '@/stores/modal'
@@ -226,6 +226,22 @@ const MAX_PASSWORD_RETRIES = 3
 let unlistenDragDrop: UnlistenFn | null = null
 let unlistenProgress: UnlistenFn | null = null
 let unlistenCliArgs: UnlistenFn | null = null
+
+// Watch for pending CLI args changes
+watch(() => store.pendingCliArgs, async (args) => {
+  if (args && args.length > 0) {
+    console.log('Processing pending CLI args from watcher:', args)
+    const argsCopy = [...args]
+    store.clearPendingCliArgs()
+    try {
+      await analyzeFiles(argsCopy)
+    } catch (error) {
+      console.error('Failed to process CLI args:', error)
+      logError(`Failed to process CLI args: ${error}`, 'app')
+      modal.showError(String(error))
+    }
+  }
+})
 
 // Global listeners for drag/drop visual feedback
 function onWindowDragOver(e: DragEvent) {
@@ -314,7 +330,8 @@ onMounted(async () => {
     unlistenCliArgs = await listen<string[]>('cli-args', async (event) => {
       if (event.payload && event.payload.length > 0) {
         console.log('CLI args event in Home.vue:', event.payload)
-        await analyzeFiles(event.payload)
+        // Use batch processing to handle multiple file selections
+        store.addCliArgsToBatch(event.payload)
       }
     })
     console.log('CLI args listener registered in Home.vue')
@@ -322,19 +339,8 @@ onMounted(async () => {
     console.error('Failed to setup CLI args listener:', error)
   }
 
-  // Check for pending CLI args (from context menu launch)
-  if (store.pendingCliArgs && store.pendingCliArgs.length > 0) {
-    console.log('Processing pending CLI args:', store.pendingCliArgs)
-    const args = [...store.pendingCliArgs]
-    store.clearPendingCliArgs()
-    try {
-      await analyzeFiles(args)
-    } catch (error) {
-      console.error('Failed to process CLI args:', error)
-      logError(`Failed to process CLI args: ${error}`, 'app')
-      modal.showError(String(error))
-    }
-  }
+  // Note: Pending CLI args are now handled by the watcher above
+  // No need to manually check here - the watcher will trigger automatically
 })
 
 onBeforeUnmount(() => {

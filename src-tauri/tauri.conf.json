@@ -27,7 +27,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [],
     "icon": [
       "icons/icon.png",
       "icons/icon.ico"
@@ -38,11 +38,6 @@
       "timestampUrl": "",
       "webviewInstallMode": {
         "type": "embedBootstrapper"
-      },
-      "nsis": {
-        "compression": "lzma",
-        "installerIcon": "icons/icon.ico",
-        "installMode": "perUser"
       }
     }
   }

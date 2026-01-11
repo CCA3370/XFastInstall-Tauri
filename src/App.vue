@@ -165,7 +165,9 @@ onMounted(async () => {
       logBasic(t('log.launchedWithArgs'), 'app')
       logDebug(`CLI args: ${event.payload.join(', ')}`, 'app')
       if (event.payload && event.payload.length > 0) {
-        store.setPendingCliArgs(event.payload)
+        // Use batch processing to handle multiple file selections
+        // (Windows launches separate instances for each file)
+        store.addCliArgsToBatch(event.payload)
         await router.push('/')
       }
     })
