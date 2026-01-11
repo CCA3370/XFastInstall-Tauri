@@ -9,7 +9,7 @@ export interface Toast {
 }
 
 // Maximum number of toasts to display at once
-const MAX_TOASTS = 5
+const MAX_TOASTS = 3
 
 export const useToastStore = defineStore('toast', () => {
   const toasts = ref<Toast[]>([])
