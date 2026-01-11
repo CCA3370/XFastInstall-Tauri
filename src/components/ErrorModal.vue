@@ -6,7 +6,7 @@
       @leave="onLeave"
       :css="false"
     >
-      <div v-if="modal.errorModal.visible" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div v-if="modal.errorModal.visible" class="fixed inset-0 z-[1100] flex items-center justify-center">
         <!-- Backdrop -->
         <div
           ref="backdrop"

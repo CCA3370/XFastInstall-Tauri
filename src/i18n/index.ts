@@ -3,10 +3,12 @@ import { invoke } from '@tauri-apps/api/core'
 import zh from './zh'
 import en from './en'
 
-// 获取系统语言
+// 获取系统语言 - 只有简体中文和繁体中文显示中文，其他一律显示英文
 const getSystemLanguage = (): string => {
   const lang = navigator.language || 'en'
-  return lang.startsWith('zh') ? 'zh' : 'en'
+  // 只匹配简体中文(zh-CN)和繁体中文(zh-TW, zh-HK)
+  const chineseLocales = ['zh-CN', 'zh-TW', 'zh-HK', 'zh-SG']
+  return chineseLocales.some(locale => lang.startsWith(locale)) ? 'zh' : 'en'
 }
 
 const initialLocale = getSystemLanguage()

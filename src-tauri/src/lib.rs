@@ -178,6 +178,25 @@ fn validate_xplane_path(path: String) -> Result<bool, String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // When a second instance is launched, this callback is triggered
+            // args[0] is the executable path, args[1..] are the actual arguments
+            let file_args: Vec<String> = args.iter().skip(1).map(|s| s.to_string()).collect();
+
+            if !file_args.is_empty() {
+                logger::log_info(
+                    &format!("{}: {:?}", logger::tr(logger::LogMsg::LaunchedWithArgs), file_args),
+                    Some("app"),
+                );
+                // Emit event to frontend with the new file paths
+                let _ = app.emit("cli-args", file_args);
+
+                // Bring window to front
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.set_focus();
+                }
+            }
+        }))
         .invoke_handler(tauri::generate_handler![
             get_cli_args,
             get_platform,
@@ -199,7 +218,7 @@ pub fn run() {
             // Log application startup
             logger::log_info(&logger::tr(logger::LogMsg::AppStarted), Some("app"));
 
-            // Handle CLI arguments if present
+            // Handle CLI arguments if present (for first launch)
             let args: Vec<String> = std::env::args().skip(1).collect();
             if !args.is_empty() {
                 logger::log_info(
