@@ -32,6 +32,7 @@ async fn analyze_addons(
     paths: Vec<String>,
     xplane_path: String,
     passwords: Option<HashMap<String, String>>,
+    verification_preferences: Option<HashMap<String, bool>>,
 ) -> Result<AnalysisResult, String> {
     // Run the analysis in a blocking thread pool to avoid blocking the async runtime
     tokio::task::spawn_blocking(move || {
@@ -39,7 +40,7 @@ async fn analyze_addons(
         log_debug!(&format!("Starting analysis with X-Plane path: {}", xplane_path), "analysis");
 
         let analyzer = Analyzer::new();
-        Ok(analyzer.analyze(paths, &xplane_path, passwords))
+        Ok(analyzer.analyze(paths, &xplane_path, passwords, verification_preferences))
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?

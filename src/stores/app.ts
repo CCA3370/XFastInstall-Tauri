@@ -34,6 +34,14 @@ export const useAppStore = defineStore('app', () => {
     [AddonType.Navdata]: true,
   })
 
+  // Verification preferences by source type (default: all enabled except RAR)
+  const verificationPreferences = ref<Record<string, boolean>>({
+    zip: true,
+    '7z': true,
+    rar: false,  // Disabled by default since RAR verification doesn't work
+    directory: true,
+  })
+
   // Overwrite settings per task (taskId -> shouldOverwrite)
   const overwriteSettings = ref<Record<string, boolean>>({})
 
@@ -119,6 +127,24 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
+  // Load verification preferences with validation
+  const savedVerificationPrefs = localStorage.getItem('verificationPreferences')
+  if (savedVerificationPrefs) {
+    try {
+      const parsed = JSON.parse(savedVerificationPrefs)
+      // Validate that parsed data is an object
+      if (typeof parsed === 'object' && parsed !== null) {
+        verificationPreferences.value = { ...verificationPreferences.value, ...parsed }
+      } else {
+        console.warn('Invalid verification preferences format, using defaults')
+        localStorage.removeItem('verificationPreferences')
+      }
+    } catch (e) {
+      console.error('Failed to parse verification preferences, clearing corrupted data', e)
+      localStorage.removeItem('verificationPreferences')
+    }
+  }
+
   function setXplanePath(path: string) {
     xplanePath.value = path
     localStorage.setItem('xplanePath', path)
@@ -135,6 +161,11 @@ export const useAppStore = defineStore('app', () => {
   function togglePreference(type: AddonType) {
     installPreferences.value[type] = !installPreferences.value[type]
     localStorage.setItem('installPreferences', JSON.stringify(installPreferences.value))
+  }
+
+  function toggleVerificationPreference(sourceType: string) {
+    verificationPreferences.value[sourceType] = !verificationPreferences.value[sourceType]
+    localStorage.setItem('verificationPreferences', JSON.stringify(verificationPreferences.value))
   }
 
   function setLogLevel(level: LogLevel) {
@@ -310,6 +341,7 @@ export const useAppStore = defineStore('app', () => {
     isAnalyzing,
     isInstalling,
     installPreferences,
+    verificationPreferences,
     logLevel,
     overwriteSettings,
     sizeConfirmations,
@@ -324,6 +356,7 @@ export const useAppStore = defineStore('app', () => {
     setXplanePath,
     loadXplanePath,
     togglePreference,
+    toggleVerificationPreference,
     setLogLevel,
     setCurrentTasks,
     clearTasks,

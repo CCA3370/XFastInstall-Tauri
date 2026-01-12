@@ -396,7 +396,8 @@ async function analyzeFiles(paths: string[], passwords?: Record<string, string>)
     const result = await invoke<AnalysisResult>('analyze_addons', {
       paths,
       xplanePath: store.xplanePath,
-      passwords: passwords || null
+      passwords: passwords || null,
+      verificationPreferences: store.verificationPreferences
     })
 
     console.log('Analysis result:', result)

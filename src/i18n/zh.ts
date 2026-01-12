@@ -100,6 +100,13 @@ export default {
     patternUnbalancedBracket: '方括号 [] 不匹配',
     patternUnbalancedBrace: '花括号 {} 不匹配',
     patternInvalidSlash: '无效的模式：包含 //',
+    verificationPreferences: '文件校验设置',
+    verificationPreferencesDesc: '选择对哪些类型的安装启用文件完整性校验',
+    verifyZip: 'ZIP 压缩包',
+    verify7z: '7z 压缩包',
+    verifyRar: 'RAR 压缩包',
+    verifyDirectory: '文件夹',
+    rarVerificationNote: 'RAR 格式暂不支持校验（库限制）',
   },
   modal: {
     confirmInstallation: '确认安装',
@@ -127,6 +134,7 @@ export default {
     existingCycle: '已存在',
     newCycle: '待安装',
     unknown: '未知',
+    noConfigPatternsHint: '需要在设置中配置备份规则',
   },
   password: {
     title: '需要密码',

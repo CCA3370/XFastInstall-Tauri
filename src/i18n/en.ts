@@ -100,6 +100,13 @@ export default {
     patternUnbalancedBracket: 'Unbalanced brackets []',
     patternUnbalancedBrace: 'Unbalanced braces {}',
     patternInvalidSlash: 'Invalid pattern: contains //',
+    verificationPreferences: 'File Verification Settings',
+    verificationPreferencesDesc: 'Choose which installation types to enable file integrity verification',
+    verifyZip: 'ZIP Archives',
+    verify7z: '7z Archives',
+    verifyRar: 'RAR Archives',
+    verifyDirectory: 'Directories',
+    rarVerificationNote: 'RAR format verification not supported (library limitation)',
   },
   modal: {
     confirmInstallation: 'Confirm Installation',
@@ -127,6 +134,7 @@ export default {
     existingCycle: 'Existing',
     newCycle: 'New',
     unknown: 'Unknown',
+    noConfigPatternsHint: 'Please configure backup rules in Settings',
   },
   password: {
     title: 'Password Required',

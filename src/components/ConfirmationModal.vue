@@ -120,11 +120,11 @@
                             <AnimatedText>{{ $t('modal.backupLiveries') }}</AnimatedText>
                           </span>
                         </label>
-                        <label class="backup-checkbox-label" :class="{ 'disabled': !store.getTaskEnabled(task.id) }">
+                        <label class="backup-checkbox-label" :class="{ 'disabled': !store.getTaskEnabled(task.id) || !hasConfigPatterns }">
                           <input
                             type="checkbox"
                             :checked="getBackupConfigFiles(task.id)"
-                            :disabled="!store.getTaskEnabled(task.id)"
+                            :disabled="!store.getTaskEnabled(task.id) || !hasConfigPatterns"
                             @change="setBackupConfigFiles(task.id, !getBackupConfigFiles(task.id))"
                             class="backup-checkbox-input"
                           >
@@ -133,7 +133,7 @@
                               <path d="M2 6L5 9L10 3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                             </svg>
                           </span>
-                          <span class="backup-checkbox-text">
+                          <span class="backup-checkbox-text" :title="!hasConfigPatterns ? $t('modal.noConfigPatternsHint') : ''">
                             <AnimatedText>{{ $t('modal.backupConfigFiles') }}</AnimatedText>
                           </span>
                         </label>
@@ -264,6 +264,12 @@ const installDisabled = computed(() => {
   if (store.enabledTasksCount === 0) return true
   // Disable if there are size warnings that haven't been confirmed
   return store.hasSizeWarnings && !store.allSizeWarningsConfirmed
+})
+
+// Check if there are any config file patterns configured
+const hasConfigPatterns = computed(() => {
+  const patterns = store.getConfigFilePatterns()
+  return patterns && patterns.length > 0
 })
 
 // Set install mode for individual task

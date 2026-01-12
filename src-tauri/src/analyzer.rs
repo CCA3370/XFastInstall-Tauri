@@ -27,6 +27,7 @@ impl Analyzer {
         paths: Vec<String>,
         xplane_path: &str,
         passwords: Option<HashMap<String, String>>,
+        verification_preferences: Option<HashMap<String, bool>>,
     ) -> AnalysisResult {
         logger::log_info(
             &format!("{}: {} path(s)", tr(LogMsg::AnalysisStarted), paths.len()),
@@ -132,7 +133,7 @@ impl Analyzer {
         // Convert to install tasks, passing archive passwords
         let tasks: Vec<InstallTask> = deduplicated
             .into_iter()
-            .map(|item| self.create_install_task(item, xplane_path, &archive_passwords))
+            .map(|item| self.create_install_task(item, xplane_path, &archive_passwords, verification_preferences.as_ref()))
             .collect();
 
         // Deduplicate tasks by target path (e.g., multiple .acf files in same aircraft folder)
@@ -350,6 +351,7 @@ impl Analyzer {
         item: DetectedItem,
         xplane_path: &str,
         archive_passwords: &HashMap<String, String>,
+        verification_preferences: Option<&HashMap<String, bool>>,
     ) -> InstallTask {
         let xplane_root = Path::new(xplane_path);
 
@@ -394,6 +396,26 @@ impl Analyzer {
         // Estimate size and check for warnings (for archives)
         let (estimated_size, size_warning) = self.estimate_archive_size(&item.path);
 
+        // Determine source type and check verification preferences
+        let source_path = Path::new(&item.path);
+        let source_type = if source_path.is_dir() {
+            "directory"
+        } else if let Some(ext) = source_path.extension().and_then(|s| s.to_str()) {
+            match ext.to_lowercase().as_str() {
+                "zip" => "zip",
+                "7z" => "7z",
+                "rar" => "rar",
+                _ => "directory", // Unknown archive types treated as directory
+            }
+        } else {
+            "directory"
+        };
+
+        // Check if verification is enabled for this source type
+        let enable_verification = verification_preferences
+            .and_then(|prefs| prefs.get(source_type).copied())
+            .unwrap_or(true); // Default to true if not specified
+
         InstallTask {
             id: Uuid::new_v4().to_string(),
             addon_type: item.addon_type,
@@ -414,7 +436,7 @@ impl Analyzer {
             backup_config_files: true, // Default to true (safe)
             config_file_patterns: vec!["*_prefs.txt".to_string()], // Default pattern
             file_hashes: None, // Will be populated by hash collector
-            enable_verification: true, // Enable by default
+            enable_verification, // Based on verification preferences
         }
     }
 

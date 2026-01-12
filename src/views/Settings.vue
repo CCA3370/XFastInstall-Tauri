@@ -11,19 +11,47 @@
       <!-- 1. X-Plane Path (Compact) -->
       <section class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300">
         <div class="p-4 space-y-3">
-          <div class="flex items-center space-x-3">
-            <div class="w-8 h-8 bg-blue-100 dark:bg-blue-500/10 rounded-lg flex items-center justify-center flex-shrink-0 text-blue-600 dark:text-blue-400">
-              <!-- Folder icon -->
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
-              </svg>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+              <div class="w-8 h-8 bg-blue-100 dark:bg-blue-500/10 rounded-lg flex items-center justify-center flex-shrink-0 text-blue-600 dark:text-blue-400">
+                <!-- Folder icon -->
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
+                </svg>
+              </div>
+              <div class="flex-1">
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white"><AnimatedText>{{ $t('settings.xplanePath') }}</AnimatedText></h3>
+              </div>
             </div>
-            <div class="flex-1">
-              <h3 class="text-sm font-semibold text-gray-900 dark:text-white"><AnimatedText>{{ $t('settings.xplanePath') }}</AnimatedText></h3>
+
+            <!-- Status indicators on the right side of title -->
+            <div class="flex items-center space-x-2">
+              <!-- Error indicator -->
+              <transition name="fade">
+                <div v-if="pathError" class="flex items-center text-[10px] font-medium space-x-1 text-red-500 dark:text-red-400">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                  </svg>
+                  <span>{{ pathError }}</span>
+                </div>
+              </transition>
+
+              <!-- Save status -->
+              <transition name="fade">
+                <div v-if="saveStatus" class="flex items-center text-[10px] font-medium space-x-1" :class="saveStatus === 'saved' ? 'text-emerald-500' : 'text-gray-400'">
+                  <svg v-if="saveStatus === 'saved'" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <svg v-else class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                  </svg>
+                  <span>{{ saveStatus === 'saved' ? $t('settings.saved') : $t('settings.saving') }}</span>
+                </div>
+              </transition>
             </div>
           </div>
 
-          <div class="relative pb-2">
+          <div class="relative">
             <div class="flex items-center bg-gray-50 dark:bg-gray-900/50 border rounded-lg overflow-hidden focus-within:border-blue-500 dark:focus-within:border-blue-500 transition-colors duration-200"
               :class="pathError ? 'border-red-500 dark:border-red-500' : 'border-gray-200 dark:border-gray-700/50'"
             >
@@ -32,6 +60,7 @@
                 type="text"
                 placeholder="C:\X-Plane 12"
                 class="flex-1 px-4 py-2.5 bg-transparent border-none text-sm text-gray-900 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:ring-0"
+                @blur="handlePathBlur"
               />
               <button
                 type="button"
@@ -44,30 +73,6 @@
                 <span><AnimatedText>{{ $t('common.browse') }}</AnimatedText></span>
               </button>
             </div>
-            <!-- Error message with absolute positioning -->
-            <transition name="fade">
-              <div v-if="pathError" class="absolute left-0 top-full mt-1 text-xs text-red-500 dark:text-red-400 flex items-center space-x-1">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                </svg>
-                <span>{{ pathError }}</span>
-              </div>
-            </transition>
-          </div>
-          
-          <!-- Auto-save status -->
-          <div class="h-4 flex items-center justify-end px-1">
-            <transition name="fade">
-              <div v-if="saveStatus" class="flex items-center text-[10px] font-medium space-x-1" :class="saveStatus === 'saved' ? 'text-emerald-500' : 'text-gray-400'">
-                <svg v-if="saveStatus === 'saved'" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                </svg>
-                <svg v-else class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                </svg>
-                <span>{{ saveStatus === 'saved' ? $t('settings.saved') : $t('settings.saving') }}</span>
-              </div>
-            </transition>
           </div>
         </div>
       </section>
@@ -177,6 +182,116 @@
             </div>
           </transition>
         </section>
+
+        <!-- 2.5. Verification Preferences -->
+        <section class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300" :class="{ 'md:col-span-2': !isWindows }">
+          <div
+            class="p-4 flex items-center justify-between cursor-pointer hover:bg-gray-50/50 dark:hover:bg-gray-700/20 transition-colors rounded-t-xl"
+            @click="verificationExpanded = !verificationExpanded"
+          >
+            <div class="flex items-center space-x-3">
+              <div class="w-8 h-8 bg-purple-100 dark:bg-purple-500/10 rounded-lg flex items-center justify-center flex-shrink-0 text-purple-600 dark:text-purple-400">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold text-gray-900 dark:text-white"><AnimatedText>{{ $t('settings.verificationPreferences') }}</AnimatedText></h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400"><AnimatedText>{{ $t('settings.verificationPreferencesDesc') }}</AnimatedText></p>
+              </div>
+            </div>
+
+            <!-- Expand/Collapse indicator -->
+            <svg
+              class="w-5 h-5 text-gray-400 dark:text-gray-500 transition-transform duration-200"
+              :class="{ 'rotate-180': verificationExpanded }"
+              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            </svg>
+          </div>
+
+          <!-- Collapsible content -->
+          <transition name="collapse">
+            <div v-if="verificationExpanded" class="px-4 pb-4 space-y-3">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <!-- ZIP -->
+                <div class="flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-900/30 border border-gray-100 dark:border-white/5">
+                  <span class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate mr-2">
+                    <AnimatedText>{{ $t('settings.verifyZip') }}</AnimatedText>
+                  </span>
+                  <button
+                    @click="store.toggleVerificationPreference('zip')"
+                    class="relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 focus:outline-none flex-shrink-0"
+                    :class="store.verificationPreferences['zip'] ? 'bg-purple-500' : 'bg-gray-300 dark:bg-gray-600'"
+                  >
+                    <span
+                      class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200 shadow-sm"
+                      :class="store.verificationPreferences['zip'] ? 'translate-x-3.5' : 'translate-x-0.5'"
+                    />
+                  </button>
+                </div>
+
+                <!-- 7z -->
+                <div class="flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-900/30 border border-gray-100 dark:border-white/5">
+                  <span class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate mr-2">
+                    <AnimatedText>{{ $t('settings.verify7z') }}</AnimatedText>
+                  </span>
+                  <button
+                    @click="store.toggleVerificationPreference('7z')"
+                    class="relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 focus:outline-none flex-shrink-0"
+                    :class="store.verificationPreferences['7z'] ? 'bg-purple-500' : 'bg-gray-300 dark:bg-gray-600'"
+                  >
+                    <span
+                      class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200 shadow-sm"
+                      :class="store.verificationPreferences['7z'] ? 'translate-x-3.5' : 'translate-x-0.5'"
+                    />
+                  </button>
+                </div>
+
+                <!-- RAR (with note) -->
+                <div class="flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-900/30 border border-gray-100 dark:border-white/5 opacity-60">
+                  <span class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate mr-2">
+                    <AnimatedText>{{ $t('settings.verifyRar') }}</AnimatedText>
+                  </span>
+                  <button
+                    @click="store.toggleVerificationPreference('rar')"
+                    class="relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 focus:outline-none flex-shrink-0"
+                    :class="store.verificationPreferences['rar'] ? 'bg-purple-500' : 'bg-gray-300 dark:bg-gray-600'"
+                    disabled
+                  >
+                    <span
+                      class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200 shadow-sm"
+                      :class="store.verificationPreferences['rar'] ? 'translate-x-3.5' : 'translate-x-0.5'"
+                    />
+                  </button>
+                </div>
+
+                <!-- Directory -->
+                <div class="flex items-center justify-between p-2 rounded-lg bg-gray-50 dark:bg-gray-900/30 border border-gray-100 dark:border-white/5">
+                  <span class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate mr-2">
+                    <AnimatedText>{{ $t('settings.verifyDirectory') }}</AnimatedText>
+                  </span>
+                  <button
+                    @click="store.toggleVerificationPreference('directory')"
+                    class="relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 focus:outline-none flex-shrink-0"
+                    :class="store.verificationPreferences['directory'] ? 'bg-purple-500' : 'bg-gray-300 dark:bg-gray-600'"
+                  >
+                    <span
+                      class="inline-block h-3 w-3 transform rounded-full bg-white transition-transform duration-200 shadow-sm"
+                      :class="store.verificationPreferences['directory'] ? 'translate-x-3.5' : 'translate-x-0.5'"
+                    />
+                  </button>
+                </div>
+              </div>
+
+              <!-- RAR note -->
+              <p class="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 p-2 rounded-lg border border-amber-200 dark:border-amber-500/20">
+                <AnimatedText>{{ $t('settings.rarVerificationNote') }}</AnimatedText>
+              </p>
+            </div>
+          </transition>
+        </section>
       </div>
 
       <!-- 3. Aircraft Backup Configuration -->
@@ -201,14 +316,30 @@
               </div>
             </div>
 
-            <!-- Expand/Collapse indicator -->
-            <svg
-              class="w-5 h-5 text-gray-400 dark:text-gray-500 transition-transform duration-200"
-              :class="{ 'rotate-180': backupExpanded }"
-              fill="none" stroke="currentColor" viewBox="0 0 24 24"
-            >
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-            </svg>
+            <!-- Status indicators and expand/collapse -->
+            <div class="flex items-center space-x-2">
+              <!-- Save status -->
+              <transition name="fade">
+                <div v-if="patternSaveStatus" class="flex items-center text-[10px] font-medium space-x-1" :class="patternSaveStatus === 'saved' ? 'text-emerald-500' : 'text-gray-400'">
+                  <svg v-if="patternSaveStatus === 'saved'" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                  </svg>
+                  <svg v-else class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                  </svg>
+                  <span>{{ patternSaveStatus === 'saved' ? $t('settings.saved') : $t('settings.saving') }}</span>
+                </div>
+              </transition>
+
+              <!-- Expand/Collapse indicator -->
+              <svg
+                class="w-5 h-5 text-gray-400 dark:text-gray-500 transition-transform duration-200"
+                :class="{ 'rotate-180': backupExpanded }"
+                fill="none" stroke="currentColor" viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+              </svg>
+            </div>
           </div>
 
           <!-- Collapsible content -->
@@ -230,6 +361,7 @@
                         class="flex-1 px-2 py-1 text-xs bg-white dark:bg-gray-800 border rounded text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
                         :class="patternErrors[index] ? 'border-red-300 dark:border-red-500' : 'border-gray-200 dark:border-gray-700'"
                         placeholder="*_prefs.txt"
+                        @blur="handlePatternBlur"
                       >
                       <button
                         @click="removePattern(index)"
@@ -261,21 +393,6 @@
                 <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
                   <AnimatedText>{{ $t('settings.patternHelpText') }}</AnimatedText>
                 </p>
-
-                <!-- Auto-save status (similar to X-Plane path) -->
-                <div class="h-4 flex items-center justify-end px-1">
-                  <transition name="fade">
-                    <div v-if="patternSaveStatus" class="flex items-center text-[10px] font-medium space-x-1" :class="patternSaveStatus === 'saved' ? 'text-emerald-500' : 'text-gray-400'">
-                      <svg v-if="patternSaveStatus === 'saved'" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                      </svg>
-                      <svg v-else class="w-3 h-3 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
-                      </svg>
-                      <span>{{ patternSaveStatus === 'saved' ? $t('settings.saved') : $t('settings.saving') }}</span>
-                    </div>
-                  </transition>
-                </div>
               </div>
             </div>
           </transition>
@@ -433,8 +550,8 @@ const configPatterns = ref<string[]>([])
 const patternErrors = ref<Record<number, string>>({})
 const backupExpanded = ref(false)
 const preferencesExpanded = ref(false) // Default collapsed
+const verificationExpanded = ref(false) // Default collapsed
 const patternSaveStatus = ref<'saving' | 'saved' | null>(null)
-let patternSaveTimeout: ReturnType<typeof setTimeout> | null = null
 
 const addonTypes = [AddonType.Aircraft, AddonType.Scenery, AddonType.SceneryLibrary, AddonType.Plugin, AddonType.Navdata]
 
@@ -502,15 +619,11 @@ onBeforeUnmount(() => {
     clearTimeout(saveTimeout)
     saveTimeout = null
   }
-  if (patternSaveTimeout) {
-    clearTimeout(patternSaveTimeout)
-    patternSaveTimeout = null
-  }
 })
 
-// Auto-save logic with path validation
-watch(xplanePathInput, async (newValue) => {
-  if (saveTimeout) clearTimeout(saveTimeout)
+// Handle X-Plane path input blur - validate and save
+async function handlePathBlur() {
+  const newValue = xplanePathInput.value
 
   // Clear previous error
   pathError.value = null
@@ -539,31 +652,22 @@ watch(xplanePathInput, async (newValue) => {
       }
     }
 
-    saveTimeout = setTimeout(() => {
-      store.setXplanePath(newValue)
-      saveStatus.value = 'saved'
-      setTimeout(() => {
-        saveStatus.value = null
-      }, 2000)
-    }, 800) // 800ms debounce
+    // Save the path
+    store.setXplanePath(newValue)
+    saveStatus.value = 'saved'
+    setTimeout(() => {
+      saveStatus.value = null
+    }, 2000)
   }
-})
+}
 
-// Watch config patterns and save to store with debounce
-watch(configPatterns, (newPatterns) => {
-  // Clear previous timeout
-  if (patternSaveTimeout) {
-    clearTimeout(patternSaveTimeout)
-  }
-
-  // Show saving status
-  patternSaveStatus.value = 'saving'
-
+// Handle pattern input blur - validate and save
+function handlePatternBlur() {
   // Validate and filter patterns
   const errors: Record<number, string> = {}
   const validPatterns: string[] = []
 
-  newPatterns.forEach((pattern, index) => {
+  configPatterns.value.forEach((pattern, index) => {
     const trimmed = pattern.trim()
     if (trimmed === '') return
 
@@ -578,23 +682,20 @@ watch(configPatterns, (newPatterns) => {
 
   patternErrors.value = errors
 
-  // Debounce save (1 second)
-  patternSaveTimeout = setTimeout(() => {
-    // Only save valid patterns
-    if (Object.keys(errors).length === 0) {
-      store.setConfigFilePatterns(validPatterns)
-      patternSaveStatus.value = 'saved'
+  // Save valid patterns
+  if (validPatterns.length > 0 || configPatterns.value.length === 0) {
+    patternSaveStatus.value = 'saving'
 
-      // Hide saved status after 2 seconds
-      setTimeout(() => {
-        patternSaveStatus.value = null
-      }, 2000)
-    } else {
-      // If there are errors, don't show saved status
+    // Save only the valid (non-empty) patterns
+    store.setConfigFilePatterns(validPatterns)
+    patternSaveStatus.value = 'saved'
+
+    // Hide saved status after 2 seconds
+    setTimeout(() => {
       patternSaveStatus.value = null
-    }
-  }, 1000) // 1 second debounce
-}, { deep: true })
+    }, 2000)
+  }
+}
 
 // Validate a glob pattern and return error message if invalid
 function validateGlobPattern(pattern: string): string | null {
@@ -639,9 +740,24 @@ function addPattern() {
   configPatterns.value.push('')
 }
 
-// Remove a pattern by index
+// Remove a pattern by index and save immediately
 function removePattern(index: number) {
   configPatterns.value.splice(index, 1)
+
+  // Save immediately after deletion
+  patternSaveStatus.value = 'saving'
+
+  // Validate and filter remaining patterns
+  const validPatterns = configPatterns.value
+    .map(p => p.trim())
+    .filter(p => p !== '' && !validateGlobPattern(p))
+
+  store.setConfigFilePatterns(validPatterns)
+  patternSaveStatus.value = 'saved'
+
+  setTimeout(() => {
+    patternSaveStatus.value = null
+  }, 2000)
 }
 
 async function selectFolder() {
