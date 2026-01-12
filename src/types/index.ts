@@ -8,6 +8,24 @@ export enum AddonType {
   Navdata = 'Navdata',
 }
 
+/** Represents a nested archive within another archive */
+export interface NestedArchiveInfo {
+  /** Path within parent archive (e.g., "aircraft/A330.zip") */
+  internalPath: string;
+  /** Password for this specific nested archive (if different from parent) */
+  password?: string;
+  /** Archive format: "zip", "7z", or "rar" */
+  format: string;
+}
+
+/** Extraction chain for nested archives (outer to inner order) */
+export interface ExtractionChain {
+  /** Ordered list of archives to extract (outer to inner) */
+  archives: NestedArchiveInfo[];
+  /** Final internal root after all extractions */
+  finalInternalRoot?: string;
+}
+
 export interface InstallTask {
   id: string;
   type: AddonType;
@@ -17,6 +35,8 @@ export interface InstallTask {
   conflictExists?: boolean;
   /** For archives: the root folder path inside the archive to extract from */
   archiveInternalRoot?: string;
+  /** For nested archives: extraction chain (takes precedence over archiveInternalRoot) */
+  extractionChain?: ExtractionChain;
   /** Whether to overwrite existing folder (delete before install) */
   shouldOverwrite?: boolean;
   /** Password for encrypted archives */
@@ -44,6 +64,8 @@ export interface AnalysisResult {
   errors: string[];
   /** List of archive paths that require a password */
   passwordRequired: string[];
+  /** Map of nested archive paths to their parent archive */
+  nestedPasswordRequired?: Record<string, string>;
 }
 
 export interface NavdataInfo {

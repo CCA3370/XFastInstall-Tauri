@@ -416,15 +416,25 @@ impl Installer {
                 .context(format!("Failed to create target directory: {:?}", parent))?;
         }
 
-        // Handle installation based on overwrite mode
-        // should_overwrite = false (default): Clean install - delete old folder first
-        // should_overwrite = true: Direct overwrite - keep existing files and overwrite
-        if !task.should_overwrite && target.exists() {
-            // Clean install mode: delete old folder first
-            self.handle_clean_install_with_progress(task, source, target, ctx, password)?;
+        // Check if this is a nested archive installation
+        if let Some(ref chain) = task.extraction_chain {
+            // Nested archive: use recursive extraction
+            if !task.should_overwrite && target.exists() {
+                // Clean install mode for nested archives
+                self.handle_clean_install_with_extraction_chain(task, source, target, chain, ctx, password)?;
+            } else {
+                // Direct overwrite mode for nested archives
+                self.install_content_with_extraction_chain(source, target, chain, ctx, password)?;
+            }
         } else {
-            // Direct overwrite mode: just install/extract files directly
-            self.install_content_with_progress(source, target, task.archive_internal_root.as_deref(), ctx, password)?;
+            // Regular installation (non-nested)
+            if !task.should_overwrite && target.exists() {
+                // Clean install mode: delete old folder first
+                self.handle_clean_install_with_progress(task, source, target, ctx, password)?;
+            } else {
+                // Direct overwrite mode: just install/extract files directly
+                self.install_content_with_progress(source, target, task.archive_internal_root.as_deref(), ctx, password)?;
+            }
         }
 
         Ok(())
@@ -446,6 +456,263 @@ impl Installer {
         } else {
             return Err(anyhow::anyhow!("Source path is neither file nor directory"));
         }
+        Ok(())
+    }
+
+    /// Install content with extraction chain (for nested archives)
+    fn install_content_with_extraction_chain(
+        &self,
+        source: &Path,
+        target: &Path,
+        chain: &crate::models::ExtractionChain,
+        ctx: &ProgressContext,
+        outermost_password: Option<&str>,
+    ) -> Result<()> {
+        use tempfile::TempDir;
+
+        // Create temp directory for intermediate extractions
+        let temp_base = TempDir::new()
+            .context("Failed to create temp directory for nested extraction")?;
+
+        let mut current_source = source.to_path_buf();
+        let mut current_password = outermost_password;
+
+        // Extract each layer in the chain
+        for (index, archive_info) in chain.archives.iter().enumerate() {
+            let is_last = index == chain.archives.len() - 1;
+
+            // Determine extraction target
+            let extract_target = if is_last {
+                // Last layer: extract directly to final target
+                target.to_path_buf()
+            } else {
+                // Intermediate layer: extract to temp
+                temp_base.path().join(format!("layer_{}", index))
+            };
+
+            // Create target directory
+            fs::create_dir_all(&extract_target)
+                .context(format!("Failed to create extraction target: {:?}", extract_target))?;
+
+            // Extract current archive
+            // For nested archives, we need to extract the specific file from the parent archive first
+            if index > 0 {
+                // This is a nested archive - need to extract it from the parent first
+                let nested_archive_path = current_source.join(&archive_info.internal_path);
+
+                if !nested_archive_path.exists() {
+                    return Err(anyhow::anyhow!(
+                        "Nested archive not found after extraction: {}",
+                        archive_info.internal_path
+                    ));
+                }
+
+                current_source = nested_archive_path;
+                current_password = archive_info.password.as_deref();
+            }
+
+            // Extract the archive
+            self.extract_archive_with_progress(
+                &current_source,
+                &extract_target,
+                None, // Don't use internal_root for intermediate layers
+                ctx,
+                current_password,
+            )?;
+
+            // For intermediate layers, update current_source to the extracted location
+            if !is_last {
+                current_source = extract_target;
+            }
+        }
+
+        // Apply final internal root if specified
+        if let Some(final_root) = &chain.final_internal_root {
+            let final_source = target.join(final_root);
+            if final_source.exists() && final_source != *target {
+                // Move contents from final_root to target
+                self.move_directory_contents(&final_source, target)?;
+                fs::remove_dir_all(&final_source)
+                    .context(format!("Failed to remove temporary directory: {:?}", final_source))?;
+            }
+        }
+
+        // Temp directory automatically cleaned up when TempDir drops
+        Ok(())
+    }
+
+    /// Move all contents from source directory to target directory
+    fn move_directory_contents(&self, source: &Path, target: &Path) -> Result<()> {
+        for entry in fs::read_dir(source)
+            .context(format!("Failed to read source directory: {:?}", source))?
+        {
+            let entry = entry?;
+            let source_path = entry.path();
+            let file_name = entry.file_name();
+            let target_path = target.join(&file_name);
+
+            if source_path.is_dir() {
+                // Try to rename (move) the directory
+                if let Err(_) = fs::rename(&source_path, &target_path) {
+                    // Fallback: copy and delete
+                    self.copy_directory_with_progress(
+                        &source_path,
+                        &target_path,
+                        &ProgressContext::new(self.app_handle.clone(), 1),
+                    )?;
+                    remove_dir_all_robust(&source_path)
+                        .context(format!("Failed to remove source directory: {:?}", source_path))?;
+                }
+            } else {
+                // Try to rename (move) the file
+                if let Err(_) = fs::rename(&source_path, &target_path) {
+                    // Fallback: copy and delete
+                    fs::copy(&source_path, &target_path)
+                        .context(format!("Failed to copy file: {:?}", source_path))?;
+                    fs::remove_file(&source_path)
+                        .context(format!("Failed to remove source file: {:?}", source_path))?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Handle clean install with extraction chain (for nested archives)
+    fn handle_clean_install_with_extraction_chain(
+        &self,
+        task: &crate::models::InstallTask,
+        source: &Path,
+        target: &Path,
+        chain: &crate::models::ExtractionChain,
+        ctx: &ProgressContext,
+        password: Option<&str>,
+    ) -> Result<()> {
+        match task.addon_type {
+            crate::models::AddonType::Aircraft => {
+                // For Aircraft: backup liveries and prefs, delete, install, restore
+                // Note: For nested archives, we don't have archive_internal_root,
+                // so we'll use the extraction chain's final_internal_root
+                self.handle_aircraft_clean_install_with_extraction_chain(
+                    source,
+                    target,
+                    chain,
+                    ctx,
+                    password,
+                    task.backup_liveries,
+                    task.backup_config_files,
+                    &task.config_file_patterns,
+                )?;
+            }
+            crate::models::AddonType::Navdata => {
+                // For Navdata: DON'T delete Custom Data folder!
+                // Just extract and overwrite individual files
+                self.install_content_with_extraction_chain(source, target, chain, ctx, password)?;
+            }
+            _ => {
+                // For other types: delete and reinstall
+                if target.exists() {
+                    remove_dir_all_robust(target)
+                        .context(format!("Failed to delete existing folder: {:?}", target))?;
+                }
+                self.install_content_with_extraction_chain(source, target, chain, ctx, password)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Handle aircraft clean install with extraction chain
+    fn handle_aircraft_clean_install_with_extraction_chain(
+        &self,
+        source: &Path,
+        target: &Path,
+        chain: &crate::models::ExtractionChain,
+        ctx: &ProgressContext,
+        password: Option<&str>,
+        backup_liveries: bool,
+        backup_config_files: bool,
+        config_file_patterns: &[String],
+    ) -> Result<()> {
+        use tempfile::Builder;
+        use uuid::Uuid;
+
+        // Step 1: Backup liveries and config files if requested
+        let backup_dir = if (backup_liveries || backup_config_files) && target.exists() {
+            let temp_dir = std::env::temp_dir();
+            let backup_path = temp_dir.join(format!("xfastinstall_backup_{}", Uuid::new_v4()));
+            fs::create_dir_all(&backup_path)
+                .context("Failed to create backup directory")?;
+
+            // Backup liveries
+            if backup_liveries {
+                let liveries_src = target.join("liveries");
+                if liveries_src.exists() {
+                    let liveries_dst = backup_path.join("liveries");
+                    self.copy_directory_with_progress(&liveries_src, &liveries_dst, ctx)?;
+                }
+            }
+
+            // Backup config files
+            if backup_config_files {
+                for pattern in config_file_patterns {
+                    for entry in glob::glob(&target.join(pattern).to_string_lossy())
+                        .context("Failed to read glob pattern")?
+                    {
+                        if let Ok(config_file) = entry {
+                            if config_file.is_file() {
+                                let file_name = config_file.file_name().unwrap();
+                                let backup_file = backup_path.join(file_name);
+                                fs::copy(&config_file, &backup_file)
+                                    .context(format!("Failed to backup config file: {:?}", config_file))?;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Some(backup_path)
+        } else {
+            None
+        };
+
+        // Step 2: Delete existing aircraft folder
+        if target.exists() {
+            remove_dir_all_robust(target)
+                .context(format!("Failed to delete existing aircraft folder: {:?}", target))?;
+        }
+
+        // Step 3: Install new aircraft using extraction chain
+        self.install_content_with_extraction_chain(source, target, chain, ctx, password)?;
+
+        // Step 4: Restore backed up files
+        if let Some(backup_path) = backup_dir {
+            // Restore liveries
+            let liveries_backup = backup_path.join("liveries");
+            if liveries_backup.exists() {
+                let liveries_target = target.join("liveries");
+                self.copy_directory_with_progress(&liveries_backup, &liveries_target, ctx)?;
+            }
+
+            // Restore config files
+            for entry in fs::read_dir(&backup_path)
+                .context("Failed to read backup directory")?
+            {
+                let entry = entry?;
+                let path = entry.path();
+                if path.is_file() {
+                    let file_name = path.file_name().unwrap();
+                    let target_file = target.join(file_name);
+                    fs::copy(&path, &target_file)
+                        .context(format!("Failed to restore config file: {:?}", path))?;
+                }
+            }
+
+            // Verify restoration and cleanup backup
+            if target.exists() {
+                fs::remove_dir_all(&backup_path)
+                    .context("Failed to cleanup backup directory")?;
+            }
+        }
+
         Ok(())
     }
 

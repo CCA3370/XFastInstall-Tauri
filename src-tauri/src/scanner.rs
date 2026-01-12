@@ -171,8 +171,8 @@ impl Scanner {
 
         match extension.as_str() {
             "zip" => self.scan_zip_with_context(archive_path, ctx, password.as_deref()),
-            "7z" => self.scan_7z(archive_path, password.as_deref()), // TODO: Add context support in Phase 3
-            "rar" => self.scan_rar(archive_path, password.as_deref()), // TODO: Add context support in Phase 3
+            "7z" => self.scan_7z_with_context(archive_path, ctx, password.as_deref()),
+            "rar" => self.scan_rar_with_context(archive_path, ctx, password.as_deref()),
             _ => Ok(Vec::new()),
         }
     }
@@ -325,6 +325,307 @@ impl Scanner {
                 // Return empty result instead of error
                 Ok(Vec::new())
             }
+        }
+    }
+
+    /// Scan a 7z archive with context (supports nested archives via temp extraction)
+    fn scan_7z_with_context(&self, archive_path: &Path, ctx: &mut ScanContext, password: Option<&str>) -> Result<Vec<DetectedItem>> {
+        use tempfile::Builder;
+
+        // First, scan the archive normally for direct addon markers
+        let mut detected = self.scan_7z(archive_path, password)?;
+
+        // If we can recurse and there are nested archives, extract and scan them
+        if ctx.can_recurse() {
+            // Open archive to list files
+            let archive = sevenz_rust2::Archive::open(archive_path)
+                .map_err(|e| anyhow::anyhow!("Failed to open 7z archive: {}", e))?;
+
+            // Find nested archives
+            let nested_archives: Vec<String> = archive.files
+                .iter()
+                .filter_map(|entry| {
+                    let name = entry.name();
+                    if !entry.is_directory() && is_archive_file(name) {
+                        Some(name.to_string())
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            // Scan each nested archive
+            for nested_path in nested_archives {
+                if Self::should_ignore_path(Path::new(&nested_path)) {
+                    continue;
+                }
+
+                match self.scan_nested_archive_in_7z(
+                    archive_path,
+                    &nested_path,
+                    ctx,
+                    password,
+                ) {
+                    Ok(nested_items) => {
+                        detected.extend(nested_items);
+                    }
+                    Err(e) => {
+                        if let Some(_) = e.downcast_ref::<PasswordRequiredError>() {
+                            return Err(anyhow::anyhow!(NestedPasswordRequiredError {
+                                parent_archive: archive_path.to_string_lossy().to_string(),
+                                nested_archive: nested_path.clone(),
+                            }));
+                        }
+                        crate::logger::log_info(
+                            &format!("Failed to scan nested archive {}: {}", nested_path, e),
+                            Some("scanner"),
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(detected)
+    }
+
+    /// Scan a nested archive within a 7z file (extract to temp)
+    fn scan_nested_archive_in_7z(
+        &self,
+        parent_path: &Path,
+        nested_path: &str,
+        ctx: &mut ScanContext,
+        parent_password: Option<&str>,
+    ) -> Result<Vec<DetectedItem>> {
+        use tempfile::Builder;
+
+        // Create temp directory for extraction
+        let temp_dir = Builder::new()
+            .prefix("xfi_7z_nested_")
+            .tempdir()
+            .context("Failed to create temp directory")?;
+
+        // Extract using 7z library
+        if let Some(pwd) = parent_password {
+            let mut reader = sevenz_rust2::SevenZReader::open(parent_path, sevenz_rust2::Password::from(pwd))
+                .map_err(|e| anyhow::anyhow!("Failed to open 7z with password: {}", e))?;
+            reader.for_each_entries(|entry, reader| {
+                let dest_path = temp_dir.path().join(entry.name());
+                if entry.is_directory() {
+                    std::fs::create_dir_all(&dest_path)?;
+                } else {
+                    if let Some(parent) = dest_path.parent() {
+                        std::fs::create_dir_all(parent)?;
+                    }
+                    let mut file = std::fs::File::create(&dest_path)?;
+                    std::io::copy(reader, &mut file)?;
+                }
+                Ok(true)
+            }).map_err(|e| anyhow::anyhow!("Failed to extract 7z with password: {}", e))?;
+        } else {
+            sevenz_rust2::decompress_file(parent_path, temp_dir.path())
+                .map_err(|e| anyhow::anyhow!("Failed to extract 7z: {}", e))?;
+        }
+
+        // Find the nested archive in extracted files
+        let temp_archive_path = temp_dir.path().join(nested_path);
+
+        if !temp_archive_path.exists() {
+            return Err(anyhow::anyhow!("Nested archive not found after extraction: {}", nested_path));
+        }
+
+        // Get archive format
+        let format = get_archive_format(nested_path)
+            .ok_or_else(|| anyhow::anyhow!("Unknown archive format: {}", nested_path))?;
+
+        // Build nested archive info
+        let nested_info = NestedArchiveInfo {
+            internal_path: nested_path.to_string(),
+            password: None,
+            format,
+        };
+
+        // Push to context chain
+        ctx.push_archive(nested_info.clone());
+
+        // Recursively scan the nested archive
+        let nested_result = self.scan_path_with_context(&temp_archive_path, ctx);
+
+        // Pop from context chain
+        ctx.pop_archive();
+
+        // Process results
+        match nested_result {
+            Ok(mut items) => {
+                // Update each detected item with extraction chain
+                for item in &mut items {
+                    let mut chain = ExtractionChain {
+                        archives: ctx.parent_chain.clone(),
+                        final_internal_root: item.archive_internal_root.clone(),
+                    };
+                    chain.archives.push(nested_info.clone());
+                    item.path = parent_path.to_string_lossy().to_string();
+                    item.extraction_chain = Some(chain);
+                    item.archive_internal_root = None;
+                }
+                Ok(items)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Scan a RAR archive with context (supports nested archives via temp extraction)
+    fn scan_rar_with_context(&self, archive_path: &Path, ctx: &mut ScanContext, password: Option<&str>) -> Result<Vec<DetectedItem>> {
+        use tempfile::Builder;
+
+        // First, scan the archive normally for direct addon markers
+        let mut detected = self.scan_rar(archive_path, password)?;
+
+        // If we can recurse and there are nested archives, extract and scan them
+        if ctx.can_recurse() {
+            // Open archive to list files
+            let archive_builder = if let Some(pwd) = password {
+                unrar::Archive::with_password(archive_path, pwd)
+            } else {
+                unrar::Archive::new(archive_path)
+            };
+
+            let archive = archive_builder
+                .open_for_listing()
+                .map_err(|e| anyhow::anyhow!("Failed to open RAR archive: {:?}", e))?;
+
+            // Find nested archives
+            let nested_archives: Vec<String> = archive
+                .filter_map(|entry| {
+                    if let Ok(e) = entry {
+                        let name = e.filename.to_string_lossy().to_string();
+                        if !e.is_directory() && is_archive_file(&name) {
+                            Some(name)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+
+            // Scan each nested archive
+            for nested_path in nested_archives {
+                if Self::should_ignore_path(Path::new(&nested_path)) {
+                    continue;
+                }
+
+                match self.scan_nested_archive_in_rar(
+                    archive_path,
+                    &nested_path,
+                    ctx,
+                    password,
+                ) {
+                    Ok(nested_items) => {
+                        detected.extend(nested_items);
+                    }
+                    Err(e) => {
+                        if let Some(_) = e.downcast_ref::<PasswordRequiredError>() {
+                            return Err(anyhow::anyhow!(NestedPasswordRequiredError {
+                                parent_archive: archive_path.to_string_lossy().to_string(),
+                                nested_archive: nested_path.clone(),
+                            }));
+                        }
+                        crate::logger::log_info(
+                            &format!("Failed to scan nested archive {}: {}", nested_path, e),
+                            Some("scanner"),
+                        );
+                    }
+                }
+            }
+        }
+
+        Ok(detected)
+    }
+
+    /// Scan a nested archive within a RAR file (extract to temp)
+    fn scan_nested_archive_in_rar(
+        &self,
+        parent_path: &Path,
+        nested_path: &str,
+        ctx: &mut ScanContext,
+        parent_password: Option<&str>,
+    ) -> Result<Vec<DetectedItem>> {
+        use tempfile::Builder;
+
+        // Create temp directory for extraction
+        let temp_dir = Builder::new()
+            .prefix("xfi_rar_nested_")
+            .tempdir()
+            .context("Failed to create temp directory")?;
+
+        // Extract the RAR archive to temp using the typestate pattern
+        let archive_builder = if let Some(pwd) = parent_password {
+            unrar::Archive::with_password(parent_path, pwd)
+        } else {
+            unrar::Archive::new(parent_path)
+        };
+
+        let mut archive = archive_builder
+            .open_for_processing()
+            .map_err(|e| anyhow::anyhow!("Failed to open RAR for processing: {:?}", e))?;
+
+        while let Some(header) = archive.read_header()
+            .map_err(|e| anyhow::anyhow!("Failed to read RAR header: {:?}", e))?
+        {
+            archive = if header.entry().is_file() {
+                header.extract_with_base(temp_dir.path())
+                    .map_err(|e| anyhow::anyhow!("Failed to extract RAR entry: {:?}", e))?
+            } else {
+                header.skip()
+                    .map_err(|e| anyhow::anyhow!("Failed to skip RAR entry: {:?}", e))?
+            };
+        }
+
+        // Find the nested archive in extracted files
+        let temp_archive_path = temp_dir.path().join(nested_path);
+
+        if !temp_archive_path.exists() {
+            return Err(anyhow::anyhow!("Nested archive not found after extraction: {}", nested_path));
+        }
+
+        // Get archive format
+        let format = get_archive_format(nested_path)
+            .ok_or_else(|| anyhow::anyhow!("Unknown archive format: {}", nested_path))?;
+
+        // Build nested archive info
+        let nested_info = NestedArchiveInfo {
+            internal_path: nested_path.to_string(),
+            password: None,
+            format,
+        };
+
+        // Push to context chain
+        ctx.push_archive(nested_info.clone());
+
+        // Recursively scan the nested archive
+        let nested_result = self.scan_path_with_context(&temp_archive_path, ctx);
+
+        // Pop from context chain
+        ctx.pop_archive();
+
+        // Process results
+        match nested_result {
+            Ok(mut items) => {
+                // Update each detected item with extraction chain
+                for item in &mut items {
+                    let mut chain = ExtractionChain {
+                        archives: ctx.parent_chain.clone(),
+                        final_internal_root: item.archive_internal_root.clone(),
+                    };
+                    chain.archives.push(nested_info.clone());
+                    item.path = parent_path.to_string_lossy().to_string();
+                    item.extraction_chain = Some(chain);
+                    item.archive_internal_root = None;
+                }
+                Ok(items)
+            }
+            Err(e) => Err(e),
         }
     }
 

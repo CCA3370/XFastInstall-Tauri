@@ -7,7 +7,7 @@ use rayon::prelude::*;
 use crate::logger;
 use crate::logger::{tr, LogMsg};
 use crate::models::{AddonType, AnalysisResult, DetectedItem, InstallTask, NavdataCycle, NavdataInfo};
-use crate::scanner::{Scanner, PasswordRequiredError};
+use crate::scanner::{Scanner, PasswordRequiredError, NestedPasswordRequiredError};
 use crate::installer::{MAX_EXTRACTION_SIZE, MAX_COMPRESSION_RATIO};
 
 pub struct Analyzer {
@@ -77,6 +77,7 @@ impl Analyzer {
         let mut all_detected = Vec::new();
         let mut errors = Vec::new();
         let mut password_required = Vec::new();
+        let mut nested_password_required = HashMap::new(); // NEW: Track nested password requirements
         // Track which archives have passwords for setting on tasks later
         let mut archive_passwords: HashMap<String, String> = HashMap::new();
 
@@ -97,7 +98,18 @@ impl Analyzer {
                             Some("analyzer"),
                         );
                         password_required.push(pwd_err.archive_path.clone());
-                    } else {
+                    }
+                    // NEW: Check if this is a nested password-required error
+                    else if let Some(nested_err) = e.downcast_ref::<NestedPasswordRequiredError>() {
+                        logger::log_info(
+                            &format!("Password required for nested archive: {} inside {}",
+                                nested_err.nested_archive, nested_err.parent_archive),
+                            Some("analyzer"),
+                        );
+                        let key = format!("{}/{}", nested_err.parent_archive, nested_err.nested_archive);
+                        nested_password_required.insert(key, nested_err.parent_archive.clone());
+                    }
+                    else {
                         // Format error message for better readability
                         let error_msg = format!("{}\n  {}\n  {}",
                             tr(LogMsg::ScanFailed),
@@ -141,7 +153,7 @@ impl Analyzer {
             tasks,
             errors,
             password_required,
-            nested_password_required: HashMap::new(),
+            nested_password_required,
         }
     }
 
