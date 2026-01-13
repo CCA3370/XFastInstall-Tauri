@@ -1161,64 +1161,58 @@ impl Installer {
 
         let mut current_password = outermost_password.map(|s| s.as_bytes().to_vec());
 
-        // Navigate through all layers except the last one
+        // Navigate through all layers
         for (index, archive_info) in chain.archives.iter().enumerate() {
-            let is_last = index == chain.archives.len() - 1;
-
             let cursor = Cursor::new(&current_archive_data);
             let mut archive = ZipArchive::new(cursor)?;
 
-            if is_last {
-                // Last layer: extract to final target
-                // Need to recreate cursor with owned data for final extraction
-                let cursor = Cursor::new(current_archive_data);
-                let mut archive = ZipArchive::new(cursor)?;
+            // Read nested archive into memory
+            let nested_path = &archive_info.internal_path;
+            let mut nested_data = Vec::new();
 
-                // Extract all files
-                self.extract_zip_from_archive(
-                    &mut archive,
-                    target,
-                    chain.final_internal_root.as_deref(),
-                    ctx,
-                    current_password.as_deref(),
-                )?;
-                break; // Done
-            } else {
-                // Intermediate layer: read nested archive into memory
-                let nested_path = &archive_info.internal_path;
-                let mut nested_data = Vec::new();
-
-                // Search for the nested archive
-                let mut found = false;
-                for i in 0..archive.len() {
-                    let mut file = if let Some(pwd) = current_password.as_deref() {
-                        match archive.by_index_decrypt(i, pwd) {
-                            Ok(f) => f,
-                            Err(_) => continue,
-                        }
-                    } else {
-                        archive.by_index(i)?
-                    };
-
-                    if file.name() == nested_path {
-                        file.read_to_end(&mut nested_data)?;
-                        found = true;
-                        break;
+            // Search for the nested archive
+            let mut found = false;
+            for i in 0..archive.len() {
+                let mut file = if let Some(pwd) = current_password.as_deref() {
+                    match archive.by_index_decrypt(i, pwd) {
+                        Ok(f) => f,
+                        Err(_) => continue,
                     }
-                }
+                } else {
+                    archive.by_index(i)?
+                };
 
-                if !found {
-                    return Err(anyhow::anyhow!(
-                        "Nested archive not found in ZIP: {}",
-                        nested_path
-                    ));
+                if file.name() == nested_path {
+                    file.read_to_end(&mut nested_data)?;
+                    found = true;
+                    break;
                 }
-
-                // Update for next iteration
-                current_archive_data = nested_data;
-                current_password = archive_info.password.as_ref().map(|s| s.as_bytes().to_vec());
             }
+
+            if !found {
+                return Err(anyhow::anyhow!(
+                    "Nested archive not found in ZIP: {}",
+                    nested_path
+                ));
+            }
+
+            // Update for next iteration
+            current_archive_data = nested_data;
+            current_password = archive_info.password.as_ref().map(|s| s.as_bytes().to_vec());
         }
+
+        // Now extract the final (innermost) archive
+        let cursor = Cursor::new(current_archive_data);
+        let mut archive = ZipArchive::new(cursor)?;
+
+        // Extract all files with final_internal_root filter
+        self.extract_zip_from_archive(
+            &mut archive,
+            target,
+            chain.final_internal_root.as_deref(),
+            ctx,
+            current_password.as_deref(),
+        )?;
 
         Ok(())
     }
