@@ -142,7 +142,12 @@ export default {
     placeholder: 'Enter password',
     unlock: 'Unlock and Continue',
     wrongPassword: 'Wrong password, please try again',
-    maxRetries: 'Too many password attempts, please try again later'
+    maxRetries: 'Too many password attempts, please try again later',
+    useUnified: 'Use Unified Password',
+    unifiedHint: 'All archives will use the same password',
+    unifiedPasswordLabel: 'Unified Password',
+    unifiedPlaceholder: 'Enter unified password (applies to all archives)',
+    archives: 'archives'
   },
   toast: {
     pathRequired: 'Please set X-Plane path in Settings first'

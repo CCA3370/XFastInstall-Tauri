@@ -84,19 +84,25 @@ jobs:
         run: |
           # Enable incremental compilation for faster rebuilds
           echo "CARGO_INCREMENTAL=1" >> $GITHUB_ENV
-          # Use more codegen units for parallel compilation (faster build)
-          echo "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16" >> $GITHUB_ENV
-          # Use thin LTO instead of fat LTO (faster linking)
-          echo "CARGO_PROFILE_RELEASE_LTO=thin" >> $GITHUB_ENV
-          # Reduce optimization level slightly for faster compilation
-          echo "CARGO_PROFILE_RELEASE_OPT_LEVEL=2" >> $GITHUB_ENV
-          # Still strip symbols
+          # Use maximum codegen units for maximum parallelism
+          echo "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=256" >> $GITHUB_ENV
+          # Disable LTO completely for fastest linking
+          echo "CARGO_PROFILE_RELEASE_LTO=off" >> $GITHUB_ENV
+          # Use minimal optimization for fastest compilation
+          echo "CARGO_PROFILE_RELEASE_OPT_LEVEL=1" >> $GITHUB_ENV
+          # Keep debug info minimal
+          echo "CARGO_PROFILE_RELEASE_DEBUG=0" >> $GITHUB_ENV
+          # Still strip symbols to reduce size
           echo "CARGO_PROFILE_RELEASE_STRIP=symbols" >> $GITHUB_ENV
           # Keep panic=abort
           echo "CARGO_PROFILE_RELEASE_PANIC=abort" >> $GITHUB_ENV
+          # Additional speed optimizations
+          echo "RUSTFLAGS=-C prefer-dynamic -C embed-bitcode=no" >> $GITHUB_ENV
+          # Use faster linker if available
+          echo "CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO=unpacked" >> $GITHUB_ENV
           echo "BUILD_MODE=fast" >> $GITHUB_ENV
-          echo "✅ Fast build environment configured"
-          echo "📊 Incremental: ON, Codegen units: 16, LTO: thin, Opt-level: 2"
+          echo "✅ Fast build environment configured (MAXIMUM SPEED)"
+          echo "📊 Incremental: ON, Codegen: 256, LTO: OFF, Opt: 1"
 
       - name: Check cache status (Fast mode)
         if: steps.check_fast.outputs.is_fast == 'true'

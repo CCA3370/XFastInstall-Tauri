@@ -142,7 +142,12 @@ export default {
     placeholder: '输入密码',
     unlock: '解锁并继续',
     wrongPassword: '密码错误，请重试',
-    maxRetries: '密码尝试次数过多，请稍后再试'
+    maxRetries: '密码尝试次数过多，请稍后再试',
+    useUnified: '使用统一密码',
+    unifiedHint: '所有压缩包将使用相同的密码',
+    unifiedPasswordLabel: '统一密码',
+    unifiedPlaceholder: '输入统一密码（应用于所有压缩包）',
+    archives: '个压缩包'
   },
   toast: {
     pathRequired: '请先在设置中配置X-Plane路径'
