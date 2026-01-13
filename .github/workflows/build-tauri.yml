@@ -96,8 +96,8 @@ jobs:
           echo "CARGO_PROFILE_RELEASE_STRIP=symbols" >> $GITHUB_ENV
           # Keep panic=abort
           echo "CARGO_PROFILE_RELEASE_PANIC=abort" >> $GITHUB_ENV
-          # Additional speed optimizations
-          echo "RUSTFLAGS=-C prefer-dynamic -C embed-bitcode=no" >> $GITHUB_ENV
+          # Additional speed optimizations (removed -C prefer-dynamic as it conflicts with panic=abort)
+          echo "RUSTFLAGS=-C embed-bitcode=no" >> $GITHUB_ENV
           # Use faster linker if available
           echo "CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO=unpacked" >> $GITHUB_ENV
           echo "BUILD_MODE=fast" >> $GITHUB_ENV
