@@ -53,12 +53,17 @@
         <div
           v-for="task in failedTasks"
           :key="task.taskId"
-          class="failed-item flex items-center gap-2 p-2 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-lg"
+          class="failed-item flex items-center justify-between gap-2 p-2 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20 rounded-lg"
         >
-          <svg class="w-4 h-4 text-red-500 dark:text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-          </svg>
-          <span class="text-sm text-red-700 dark:text-red-200 truncate">{{ task.taskName }}</span>
+          <div class="flex items-center gap-2 flex-1 min-w-0">
+            <svg class="w-4 h-4 text-red-500 dark:text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+            <span class="text-sm text-red-700 dark:text-red-200 truncate">{{ task.taskName }}</span>
+          </div>
+          <span class="text-xs text-red-600 dark:text-red-300 font-medium flex-shrink-0" :title="task.errorMessage">
+            {{ getSimpleErrorReason(task.errorMessage) }}
+          </span>
         </div>
       </div>
     </div>
@@ -105,6 +110,57 @@ const statusTitle = computed(() => {
 const failedTasks = computed(() =>
   props.result.taskResults.filter(task => !task.success)
 )
+
+// Simplify error message to show brief reason
+function getSimpleErrorReason(errorMessage?: string): string {
+  if (!errorMessage) {
+    return t('completion.unknownError')
+  }
+
+  const msg = errorMessage.toLowerCase()
+
+  // Verification failures
+  if (msg.includes('verification failed') || msg.includes('校验失败')) {
+    return t('completion.verificationFailed')
+  }
+
+  // Disk space issues
+  if (msg.includes('no space') || msg.includes('disk') || msg.includes('磁盘空间')) {
+    return t('completion.diskSpaceFull')
+  }
+
+  // Permission issues
+  if (msg.includes('permission') || msg.includes('access denied') || msg.includes('权限')) {
+    return t('completion.permissionDenied')
+  }
+
+  // File not found
+  if (msg.includes('not found') || msg.includes('找不到')) {
+    return t('completion.fileNotFound')
+  }
+
+  // Password issues
+  if (msg.includes('password') || msg.includes('密码')) {
+    return t('completion.passwordError')
+  }
+
+  // Extraction/Archive issues
+  if (msg.includes('extract') || msg.includes('archive') || msg.includes('解压')) {
+    return t('completion.extractionFailed')
+  }
+
+  // Network issues
+  if (msg.includes('network') || msg.includes('connection') || msg.includes('网络')) {
+    return t('completion.networkError')
+  }
+
+  // Default: show first part of error
+  const firstLine = errorMessage.split('\n')[0]
+  if (firstLine.length > 30) {
+    return firstLine.substring(0, 27) + '...'
+  }
+  return firstLine
+}
 </script>
 
 <style scoped>

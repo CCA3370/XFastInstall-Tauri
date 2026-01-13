@@ -57,9 +57,10 @@ impl FileVerifier {
         // Parallel verification
         let results: Vec<FileVerificationResult> = files_to_verify
             .par_iter()
-            .map(|(path, relative_path)| {
-                let expected = expected_hashes.get(relative_path).unwrap();
-                self.verify_single_file(path, relative_path, expected)
+            .filter_map(|(path, relative_path)| {
+                // Get expected hash (should always exist since we built files_to_verify from expected_hashes)
+                let expected = expected_hashes.get(relative_path)?;
+                Some(self.verify_single_file(path, relative_path, expected))
             })
             .collect();
 

@@ -177,6 +177,15 @@ export default {
     successful: '成功',
     failed: '失败',
     failedTasks: '失败的任务',
-    confirm: '确认'
+    confirm: '确认',
+    // Error reasons
+    unknownError: '未知错误',
+    verificationFailed: '内容校验失败',
+    diskSpaceFull: '磁盘空间不足',
+    permissionDenied: '权限不足',
+    fileNotFound: '文件未找到',
+    passwordError: '密码错误',
+    extractionFailed: '解压失败',
+    networkError: '网络错误'
   }
 }

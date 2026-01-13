@@ -217,7 +217,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { AddonType, NavdataInfo } from '@/types'
 import AnimatedText from '@/components/AnimatedText.vue'
@@ -279,12 +279,6 @@ function setTaskInstallMode(taskId: string, directOverwrite: boolean) {
   store.setTaskOverwrite(taskId, directOverwrite)
 }
 
-// Toggle individual task overwrite (kept for compatibility)
-function toggleTaskOverwrite(taskId: string) {
-  const currentValue = store.getTaskOverwrite(taskId)
-  store.setTaskOverwrite(taskId, !currentValue)
-}
-
 // Toggle individual task size confirmation
 function toggleTaskSizeConfirm(taskId: string) {
   const currentValue = store.getTaskSizeConfirmed(taskId)
@@ -310,7 +304,8 @@ function setBackupLiveries(taskId: string, value: boolean) {
 
 // Get backup config files setting for a task
 function getBackupConfigFiles(taskId: string): boolean {
-  return store.getTaskBackupSettings(taskId).configFiles
+  // Only return true if patterns are configured
+  return hasConfigPatterns.value && store.getTaskBackupSettings(taskId).configFiles
 }
 
 // Set backup config files setting for a task

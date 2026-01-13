@@ -36,7 +36,9 @@
       "Bash(cargo doc:*)",
       "Bash(unzip:*)",
       "Bash(7z l:*)",
-      "Bash(cargo clean:*)"
+      "Bash(cargo clean:*)",
+      "Bash(npx vue-tsc:*)",
+      "Bash(find:*)"
     ]
   }
 }

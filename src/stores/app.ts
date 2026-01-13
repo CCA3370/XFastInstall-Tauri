@@ -1,8 +1,11 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { AddonType, type InstallTask, type InstallResult } from '@/types'
 
 export type LogLevel = 'basic' | 'full' | 'debug'
+
+/** Delay to batch multiple CLI file selections (500ms) */
+const CLI_ARGS_BATCH_DELAY_MS = 500
 
 export const useAppStore = defineStore('app', () => {
   const xplanePath = ref<string>('')
@@ -19,7 +22,6 @@ export const useAppStore = defineStore('app', () => {
   // Batch processing for CLI args (to handle multiple file selections)
   const cliArgsBatch = ref<string[]>([])
   let cliArgsBatchTimer: ReturnType<typeof setTimeout> | null = null
-  const CLI_ARGS_BATCH_DELAY = 500 // 500ms delay to collect all files
 
   // Installation result state
   const installResult = ref<InstallResult | null>(null)
@@ -223,7 +225,8 @@ export const useAppStore = defineStore('app', () => {
       shouldOverwrite: overwriteSettings.value[task.id] ?? false,
       sizeConfirmed: sizeConfirmations.value[task.id] ?? false,
       backupLiveries: backupSettings.value[task.id]?.liveries ?? true,
-      backupConfigFiles: backupSettings.value[task.id]?.configFiles ?? true,
+      // Only enable config file backup if patterns are configured
+      backupConfigFiles: (configFilePatterns.value.length > 0) && (backupSettings.value[task.id]?.configFiles ?? true),
       configFilePatterns: configFilePatterns.value,
     }))
   }
@@ -304,12 +307,12 @@ export const useAppStore = defineStore('app', () => {
     cliArgsBatchTimer = setTimeout(() => {
       if (cliArgsBatch.value.length > 0) {
         // Remove duplicates
-        const uniqueArgs = Array.from(new Set(cliArgsBatch.value))
+        const uniqueArgs = Array.from(new Set(cliArgsBatch.value)) as string[]
         setPendingCliArgs(uniqueArgs)
         cliArgsBatch.value = []
       }
       cliArgsBatchTimer = null
-    }, CLI_ARGS_BATCH_DELAY)
+    }, CLI_ARGS_BATCH_DELAY_MS)
   }
 
   // Clear pending CLI args after processing

@@ -177,6 +177,15 @@ export default {
     successful: 'Successful',
     failed: 'Failed',
     failedTasks: 'Failed Tasks',
-    confirm: 'Confirm'
+    confirm: 'Confirm',
+    // Error reasons
+    unknownError: 'Unknown Error',
+    verificationFailed: 'Verification Failed',
+    diskSpaceFull: 'Disk Space Full',
+    permissionDenied: 'Permission Denied',
+    fileNotFound: 'File Not Found',
+    passwordError: 'Password Error',
+    extractionFailed: 'Extraction Failed',
+    networkError: 'Network Error'
   }
 }

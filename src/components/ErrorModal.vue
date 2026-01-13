@@ -152,15 +152,21 @@ function onLeave(el: Element, done: () => void) {
   backdropEl.style.transition = 'opacity 0.3s ease-in'
   cardEl.style.transition = 'all 0.3s cubic-bezier(0.4, 0, 0.6, 1)'
 
+  // Fallback timeout in case transitionend doesn't fire
+  let fallbackTimeout: ReturnType<typeof setTimeout> | null = null
+
   // Listen for transition end on the card element
   const handleTransitionEnd = () => {
     cardEl.removeEventListener('transitionend', handleTransitionEnd)
+    if (fallbackTimeout) {
+      clearTimeout(fallbackTimeout)
+      fallbackTimeout = null
+    }
     done()
   }
   cardEl.addEventListener('transitionend', handleTransitionEnd)
 
-  // Fallback timeout in case transitionend doesn't fire
-  const fallbackTimeout = setTimeout(() => {
+  fallbackTimeout = setTimeout(() => {
     cardEl.removeEventListener('transitionend', handleTransitionEnd)
     done()
   }, 350)

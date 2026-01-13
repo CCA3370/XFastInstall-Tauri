@@ -18,6 +18,14 @@ pub const MAX_EXTRACTION_SIZE: u64 = 20 * 1024 * 1024 * 1024;
 /// Maximum compression ratio to detect zip bombs (100:1)
 pub const MAX_COMPRESSION_RATIO: u64 = 100;
 
+/// Maximum size for in-memory ZIP optimization (200 MB)
+/// Larger files are extracted via temp directory to avoid memory pressure
+pub const MAX_MEMORY_ZIP_SIZE: u64 = 200 * 1024 * 1024;
+
+/// Buffer size for file I/O operations (4 MB)
+/// Optimized for modern SSDs and network storage
+const IO_BUFFER_SIZE: usize = 4 * 1024 * 1024;
+
 /// Check if a filename matches any of the given glob patterns
 fn matches_any_pattern(filename: &str, patterns: &[String]) -> bool {
     patterns.iter().any(|pattern| {
@@ -52,8 +60,7 @@ fn copy_file_optimized<R: std::io::Read + ?Sized, W: std::io::Write>(
     reader: &mut R,
     writer: &mut W,
 ) -> std::io::Result<u64> {
-    const BUFFER_SIZE: usize = 4 * 1024 * 1024; // 4MB buffer for better performance
-    let mut buffer = vec![0u8; BUFFER_SIZE];
+    let mut buffer = vec![0u8; IO_BUFFER_SIZE];
     let mut total_bytes = 0u64;
 
     loop {
@@ -128,7 +135,9 @@ fn remove_dir_all_robust(path: &Path) -> Result<()> {
     }
 
     // All retries failed, provide detailed error information
-    let e = last_error.unwrap();
+    let e = last_error.unwrap_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::Other, "Unknown error during directory removal")
+    });
     let err_msg = format!(
         "Failed to delete directory: {:?}\nError: {}\n\
         This may be caused by:\n\
@@ -193,7 +202,13 @@ impl ProgressContext {
         // Throttle: emit at most every 16ms (60fps for smooth animation)
         let mut last = match self.last_emit.lock() {
             Ok(guard) => guard,
-            Err(_) => return, // Skip progress update if lock is poisoned
+            Err(e) => {
+                logger::log_error(
+                    &format!("Progress mutex poisoned, skipping update: {}", e),
+                    Some("installer")
+                );
+                return; // Skip progress update if lock is poisoned
+            }
         };
         let now = Instant::now();
         if now.duration_since(*last).as_millis() < 16 {
@@ -1505,9 +1520,8 @@ impl Installer {
         use std::io::{Cursor, Read};
 
         // Check file size before loading into memory (limit: 200MB)
-        const MAX_MEMORY_SIZE: u64 = 200 * 1024 * 1024;
         let metadata = fs::metadata(zip_path)?;
-        if metadata.len() > MAX_MEMORY_SIZE {
+        if metadata.len() > MAX_MEMORY_ZIP_SIZE {
             return Err(anyhow::anyhow!(
                 "ZIP file too large for memory optimization ({} MB > 200 MB)",
                 metadata.len() / 1024 / 1024
@@ -2492,7 +2506,7 @@ impl Installer {
                     // Create file and compute hash while writing
                     let mut file = std::fs::File::create(&dest_path)?;
                     let mut hasher = Sha256::new();
-                    let mut buffer = vec![0u8; 4 * 1024 * 1024]; // 4MB buffer
+                    let mut buffer = vec![0u8; IO_BUFFER_SIZE];
 
                     loop {
                         let bytes_read = reader.read(&mut buffer)?;
@@ -2650,7 +2664,7 @@ impl Installer {
 
         let mut file = fs::File::open(path)?;
         let mut hasher = Sha256::new();
-        let mut buffer = vec![0u8; 4 * 1024 * 1024]; // 4MB buffer
+        let mut buffer = vec![0u8; IO_BUFFER_SIZE];
 
         loop {
             let bytes_read = file.read(&mut buffer)?;

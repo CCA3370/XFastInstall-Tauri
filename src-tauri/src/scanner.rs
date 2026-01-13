@@ -564,9 +564,8 @@ impl Scanner {
         use std::io::{Cursor, Read};
 
         // Check file size before loading into memory (limit: 200MB)
-        const MAX_MEMORY_SIZE: u64 = 200 * 1024 * 1024;
         let metadata = fs::metadata(zip_path)?;
-        if metadata.len() > MAX_MEMORY_SIZE {
+        if metadata.len() > crate::installer::MAX_MEMORY_ZIP_SIZE {
             return Err(anyhow::anyhow!(
                 "ZIP file too large for memory optimization ({} MB > 200 MB)",
                 metadata.len() / 1024 / 1024
@@ -798,26 +797,59 @@ impl Scanner {
 
     /// Scan a 7z archive without extraction
     fn scan_7z(&self, archive_path: &Path, password: Option<&str>) -> Result<Vec<DetectedItem>> {
-        // sevenz-rust2 requires password at decompression time, not for listing
-        // Try to open the archive for listing first
+        // sevenz-rust2 can open encrypted archives for listing, but needs password for extraction
+        // We need to test extraction to detect if password is required
         let archive = sevenz_rust2::Archive::open(archive_path)
-            .map_err(|e| {
-                let err_str = format!("{:?}", e);
-                // Check for password-related errors
-                if err_str.contains("password") || err_str.contains("Password") || err_str.contains("encrypted") {
-                    // If we don't have a password, request one
-                    if password.is_none() {
-                        anyhow::anyhow!(PasswordRequiredError {
-                            archive_path: archive_path.to_string_lossy().to_string(),
-                        })
-                    } else {
-                        // Password was provided but still failed - wrong password
-                        anyhow::anyhow!("Wrong password for archive: {}", archive_path.display())
+            .map_err(|e| anyhow::anyhow!("Failed to open 7z archive: {}", e))?;
+
+        // Check if archive is encrypted by attempting to read first file
+        if password.is_none() && !archive.files.is_empty() {
+            // Find first non-directory file
+            let has_files = archive.files.iter().any(|f| !f.is_directory());
+
+            if has_files {
+                // Try to open with empty password to detect encryption
+                let test_result = sevenz_rust2::SevenZReader::open(
+                    archive_path,
+                    sevenz_rust2::Password::empty()
+                );
+
+                match test_result {
+                    Ok(mut reader) => {
+                        // Try to read first entry to trigger password check
+                        let mut encryption_detected = false;
+                        let _read_result = reader.for_each_entries(|entry, reader| {
+                            if !entry.is_directory() && !encryption_detected {
+                                // Try to read just 1 byte to test encryption
+                                let mut buf = [0u8; 1];
+                                if let Err(_) = std::io::Read::read(reader, &mut buf) {
+                                    encryption_detected = true;
+                                    return Ok(false); // Stop iteration
+                                }
+                                Ok(false) // Stop after first file
+                            } else {
+                                Ok(true) // Continue to next entry
+                            }
+                        });
+
+                        if encryption_detected {
+                            return Err(anyhow::anyhow!(PasswordRequiredError {
+                                archive_path: archive_path.to_string_lossy().to_string(),
+                            }));
+                        }
                     }
-                } else {
-                    anyhow::anyhow!("Failed to open 7z archive: {}", e)
+                    Err(e) => {
+                        let err_str = format!("{:?}", e);
+                        if err_str.contains("password") || err_str.contains("Password")
+                            || err_str.contains("encrypted") || err_str.contains("WrongPassword") {
+                            return Err(anyhow::anyhow!(PasswordRequiredError {
+                                archive_path: archive_path.to_string_lossy().to_string(),
+                            }));
+                        }
+                    }
                 }
-            })?;
+            }
+        }
 
         let mut detected = Vec::new();
 
@@ -1421,11 +1453,25 @@ impl Scanner {
         let mut files_info = Vec::new();
         let mut has_encrypted = false;
         for i in 0..archive.len() {
-            let file = archive.by_index(i)?;
-            if file.encrypted() {
-                has_encrypted = true;
+            // Use by_index_raw to avoid triggering decryption errors
+            match archive.by_index_raw(i) {
+                Ok(file) => {
+                    if file.encrypted() {
+                        has_encrypted = true;
+                    }
+                    files_info.push((i, file.name().to_string(), file.encrypted()));
+                }
+                Err(e) => {
+                    // If we can't read the file info, it might be corrupted or encrypted
+                    let err_str = format!("{:?}", e);
+                    if err_str.contains("password") || err_str.contains("Password")
+                        || err_str.contains("encrypted") || err_str.contains("InvalidPassword") {
+                        has_encrypted = true;
+                    } else {
+                        return Err(anyhow::anyhow!("Failed to read ZIP entry {}: {}", i, e));
+                    }
+                }
             }
-            files_info.push((i, file.name().to_string(), file.encrypted()));
         }
 
         // If any file is encrypted but no password provided, request password

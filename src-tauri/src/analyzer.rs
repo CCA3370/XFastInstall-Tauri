@@ -519,6 +519,7 @@ impl Analyzer {
             }
         };
 
+        // Get metadata from already-opened file handle (optimization: single pass)
         let archive_size = match file.metadata() {
             Ok(m) => m.len(),
             Err(e) => {

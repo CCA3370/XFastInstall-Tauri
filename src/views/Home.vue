@@ -222,6 +222,10 @@ const collectedPasswords = ref<Record<string, string>>({})
 const passwordRetryCount = ref(0)
 const MAX_PASSWORD_RETRIES = 3
 
+// Password rate limiting
+const passwordAttemptTimestamps = ref<number[]>([])
+const MIN_PASSWORD_ATTEMPT_DELAY_MS = 1000 // 1 second between attempts
+
 // Tauri drag-drop event unsubscribe function
 let unlistenDragDrop: UnlistenFn | null = null
 let unlistenProgress: UnlistenFn | null = null
@@ -233,19 +237,18 @@ watch(() => store.pendingCliArgs, async (args) => {
     // If currently analyzing or installing, re-queue args to batch for later processing
     // This ensures multiple rapid CLI inputs are merged and processed together
     if (store.isAnalyzing || store.isInstalling) {
-      console.log('Analysis in progress, re-queueing args for later')
+      logDebug('Analysis in progress, re-queueing args for later', 'app')
       store.addCliArgsToBatch(args)
       store.clearPendingCliArgs()
       return
     }
 
-    console.log('Processing pending CLI args from watcher:', args)
+    logDebug(`Processing pending CLI args from watcher: ${args.join(', ')}`, 'app')
     const argsCopy = [...args]
     store.clearPendingCliArgs()
     try {
       await analyzeFiles(argsCopy)
     } catch (error) {
-      console.error('Failed to process CLI args:', error)
       logError(`Failed to process CLI args: ${error}`, 'app')
       modal.showError(String(error))
     }
@@ -353,6 +356,12 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  // Clear CLI args batch timer to prevent memory leak
+  if (cliArgsBatchTimer) {
+    clearTimeout(cliArgsBatchTimer)
+    cliArgsBatchTimer = null
+  }
+
   window.removeEventListener('dragover', onWindowDragOver)
   window.removeEventListener('dragleave', onWindowDragLeave)
   window.removeEventListener('drop', onWindowDrop)
@@ -428,7 +437,7 @@ async function analyzeFiles(paths: string[], passwords?: Record<string, string>)
       )
 
       if (hasPasswordError && passwords) {
-        // Increment retry counter only on password error
+        // Increment retry counter BEFORE checking limit to prevent race condition
         passwordRetryCount.value++
 
         // Check if we've exceeded retry limit
@@ -493,6 +502,29 @@ async function analyzeFiles(paths: string[], passwords?: Record<string, string>)
 
 // Handle password modal submit
 async function handlePasswordSubmit(passwords: Record<string, string>) {
+  // Rate limiting: check if attempts are too frequent
+  const now = Date.now()
+  const recentAttempts = passwordAttemptTimestamps.value.filter(
+    t => now - t < 10000 // Last 10 seconds
+  )
+
+  if (recentAttempts.length > 0) {
+    const lastAttempt = Math.max(...recentAttempts)
+    const timeSinceLastAttempt = now - lastAttempt
+
+    if (timeSinceLastAttempt < MIN_PASSWORD_ATTEMPT_DELAY_MS) {
+      toast.warning(t('password.tooFast') || 'Please wait before trying again')
+      return
+    }
+  }
+
+  // Record this attempt
+  passwordAttemptTimestamps.value.push(now)
+  // Keep only recent attempts (last 10 seconds)
+  passwordAttemptTimestamps.value = passwordAttemptTimestamps.value.filter(
+    t => now - t < 10000
+  )
+
   showPasswordModal.value = false
   logOperation(t('log.passwordEntered'), t('log.fileCount', { count: Object.keys(passwords).length }))
   // Merge new passwords with previously collected ones
