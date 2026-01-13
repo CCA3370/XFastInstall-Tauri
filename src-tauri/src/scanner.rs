@@ -1351,7 +1351,8 @@ impl Scanner {
         // Collect all file paths
         let mut files_info = Vec::new();
         for i in 0..archive.len() {
-            let file = archive.by_index(i)?;
+            // Use by_index_raw to avoid triggering decryption errors when reading metadata
+            let file = archive.by_index_raw(i)?;
             files_info.push((i, file.name().to_string()));
         }
 

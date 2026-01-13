@@ -86,8 +86,21 @@ impl Analyzer {
             match result {
                 Ok(detected) => {
                     // Store password for this archive if provided
+                    // Use the same key format as scanner (Path::to_string_lossy)
                     if let Some(pwd) = password {
-                        archive_passwords.insert(path_str.clone(), pwd);
+                        // Store with original path_str
+                        archive_passwords.insert(path_str.clone(), pwd.clone());
+                        // Also store with Path-normalized format (same as scanner uses)
+                        let normalized = Path::new(&path_str).to_string_lossy().to_string();
+                        if normalized != path_str {
+                            archive_passwords.insert(normalized, pwd.clone());
+                        }
+                        // Also store with the detected item's path format
+                        for item in &detected {
+                            if !archive_passwords.contains_key(&item.path) {
+                                archive_passwords.insert(item.path.clone(), pwd.clone());
+                            }
+                        }
                     }
                     all_detected.extend(detected);
                 }
@@ -392,6 +405,21 @@ impl Analyzer {
 
         // Get password for this archive if it was provided
         let password = archive_passwords.get(&item.path).cloned();
+
+        // Debug: log password lookup
+        if password.is_some() {
+            logger::log_info(
+                &format!("Password found for task: {}", item.display_name),
+                Some("analyzer"),
+            );
+        } else if !archive_passwords.is_empty() {
+            logger::log_info(
+                &format!("Password NOT found for item.path: '{}', available keys: {:?}",
+                    item.path,
+                    archive_passwords.keys().collect::<Vec<_>>()),
+                Some("analyzer"),
+            );
+        }
 
         // Estimate size and check for warnings (for archives)
         let (estimated_size, size_warning) = self.estimate_archive_size(&item.path);

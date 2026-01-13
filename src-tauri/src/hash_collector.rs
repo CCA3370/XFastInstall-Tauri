@@ -84,7 +84,8 @@ impl HashCollector {
         };
 
         for i in 0..archive.len() {
-            let file = archive.by_index(i)?;
+            // Use by_index_raw to avoid triggering decryption errors when reading metadata
+            let file = archive.by_index_raw(i)?;
             let name = file.name().replace('\\', "/");
 
             // Skip directories

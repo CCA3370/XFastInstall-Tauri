@@ -54,6 +54,61 @@ pub fn sanitize_path(path: &Path) -> Option<PathBuf> {
     }
 }
 
+/// Fast directory size calculation for progress monitoring
+/// Uses a simple recursive approach without following symlinks
+fn get_directory_size_fast(path: &Path) -> u64 {
+    let mut total = 0u64;
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() {
+                if let Ok(meta) = fs::metadata(&path) {
+                    total += meta.len();
+                }
+            } else if path.is_dir() {
+                total += get_directory_size_fast(&path);
+            }
+        }
+    }
+    total
+}
+
+/// Get a recently modified file name for progress display
+fn get_recent_file(path: &Path) -> Option<String> {
+    let mut newest: Option<(std::time::SystemTime, String)> = None;
+
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries.flatten() {
+            let entry_path = entry.path();
+            if entry_path.is_file() {
+                if let Ok(meta) = fs::metadata(&entry_path) {
+                    if let Ok(modified) = meta.modified() {
+                        let name = entry_path.file_name()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or("unknown")
+                            .to_string();
+
+                        if let Some((ref newest_time, _)) = newest {
+                            if modified > *newest_time {
+                                newest = Some((modified, name));
+                            }
+                        } else {
+                            newest = Some((modified, name));
+                        }
+                    }
+                }
+            } else if entry_path.is_dir() {
+                // Check subdirectories too
+                if let Some(sub_file) = get_recent_file(&entry_path) {
+                    return Some(sub_file);
+                }
+            }
+        }
+    }
+
+    newest.map(|(_, name)| name)
+}
+
 /// Optimized file copy with buffering for better performance
 /// Uses a larger buffer (4MB) for faster I/O operations
 fn copy_file_optimized<R: std::io::Read + ?Sized, W: std::io::Write>(
@@ -167,6 +222,7 @@ struct AircraftBackup {
 }
 
 /// Progress tracking context
+#[derive(Clone)]
 struct ProgressContext {
     app_handle: AppHandle,
     total_bytes: Arc<AtomicU64>,
@@ -175,6 +231,8 @@ struct ProgressContext {
     current_task_index: usize,
     total_tasks: usize,
     current_task_name: String,
+    /// Verification progress (0-100), stored as integer percentage * 100 for atomic ops
+    verification_progress: Arc<AtomicU64>,
 }
 
 impl ProgressContext {
@@ -187,6 +245,7 @@ impl ProgressContext {
             current_task_index: 0,
             total_tasks,
             current_task_name: String::new(),
+            verification_progress: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -196,6 +255,19 @@ impl ProgressContext {
 
     fn add_bytes(&self, bytes: u64) {
         self.processed_bytes.fetch_add(bytes, Ordering::SeqCst);
+    }
+
+    /// Set verification progress (0.0 - 100.0)
+    fn set_verification_progress(&self, progress: f64) {
+        // Store as integer (progress * 100) for atomic operations
+        let stored = (progress * 100.0) as u64;
+        self.verification_progress.store(stored, Ordering::SeqCst);
+    }
+
+    /// Get verification progress (0.0 - 100.0)
+    fn get_verification_progress(&self) -> f64 {
+        let stored = self.verification_progress.load(Ordering::SeqCst);
+        stored as f64 / 100.0
     }
 
     fn emit_progress(&self, current_file: Option<String>, phase: InstallPhase) {
@@ -219,10 +291,27 @@ impl ProgressContext {
 
         let total = self.total_bytes.load(Ordering::SeqCst);
         let processed = self.processed_bytes.load(Ordering::SeqCst);
-        let percentage = if total > 0 {
-            (processed as f64 / total as f64) * 100.0
-        } else {
-            0.0
+
+        // Calculate percentage: installation is 0-90%, verification is 90-100%
+        let (percentage, verification_progress) = match phase {
+            InstallPhase::Verifying => {
+                let verify_progress = self.get_verification_progress();
+                // 90% + (verification_progress / 100) * 10%
+                let pct = 90.0 + (verify_progress / 100.0) * 10.0;
+                (pct, Some(verify_progress))
+            }
+            InstallPhase::Finalizing => {
+                (100.0, None)
+            }
+            _ => {
+                // Installation phase: 0-90%
+                let install_pct = if total > 0 {
+                    (processed as f64 / total as f64) * 90.0
+                } else {
+                    0.0
+                };
+                (install_pct, None)
+            }
         };
 
         let progress = InstallProgress {
@@ -234,6 +323,7 @@ impl ProgressContext {
             current_task_name: self.current_task_name.clone(),
             current_file,
             phase,
+            verification_progress,
         };
 
         let _ = self.app_handle.emit("install-progress", &progress);
@@ -242,14 +332,10 @@ impl ProgressContext {
     fn emit_final(&self, phase: InstallPhase) {
         let total = self.total_bytes.load(Ordering::SeqCst);
         let processed = self.processed_bytes.load(Ordering::SeqCst);
-        let percentage = if total > 0 {
-            (processed as f64 / total as f64) * 100.0
-        } else {
-            100.0
-        };
 
+        // Final progress is always 100%
         let progress = InstallProgress {
-            percentage,
+            percentage: 100.0,
             total_bytes: total,
             processed_bytes: processed,
             current_task_index: self.current_task_index,
@@ -257,6 +343,7 @@ impl ProgressContext {
             current_task_name: self.current_task_name.clone(),
             current_file: None,
             phase,
+            verification_progress: None,
         };
 
         let _ = self.app_handle.emit("install-progress", &progress);
@@ -303,8 +390,16 @@ impl Installer {
             match self.install_task_with_progress(task, &ctx) {
                 Ok(_) => {
                     // Verify installation by checking for typical files
-                    match self.verify_installation(task) {
+                    // Reset verification progress for this task
+                    ctx.set_verification_progress(0.0);
+                    ctx.emit_progress(Some("Verifying...".to_string()), InstallPhase::Verifying);
+
+                    match self.verify_installation(task, &ctx) {
                         Ok(verification_stats) => {
+                            // Set verification to 100% for this task
+                            ctx.set_verification_progress(100.0);
+                            ctx.emit_progress(None, InstallPhase::Verifying);
+
                             successful += 1;
                             logger::log_info(
                                 &format!("{}: {}", tr(LogMsg::InstallationCompleted), task.display_name),
@@ -366,27 +461,81 @@ impl Installer {
     }
 
     /// Calculate total size of all tasks for progress tracking
+    /// Includes extra size for backup/restore operations during clean install
     fn calculate_total_size(&self, tasks: &[InstallTask]) -> Result<u64> {
         let mut total = 0u64;
         for task in tasks {
             let source = Path::new(&task.source_path);
+            let target = Path::new(&task.target_path);
+
+            // Add source size (archive or directory)
             if source.is_dir() {
                 total += self.get_directory_size(source)?;
             } else if source.is_file() {
                 total += self.get_archive_size(source, task.archive_internal_root.as_deref())?;
             }
+
+            // For clean install with existing target, add backup/restore overhead
+            // This accounts for: backup liveries + backup configs + restore liveries + restore configs
+            if !task.should_overwrite && target.exists() {
+                match task.addon_type {
+                    AddonType::Aircraft => {
+                        // Backup and restore liveries (2x: backup + restore)
+                        if task.backup_liveries {
+                            let liveries_path = target.join("liveries");
+                            if liveries_path.exists() && liveries_path.is_dir() {
+                                let liveries_size = self.get_directory_size(&liveries_path).unwrap_or(0);
+                                total += liveries_size * 2; // backup + restore
+                            }
+                        }
+
+                        // Backup and restore config files (2x: backup + restore)
+                        if task.backup_config_files {
+                            let config_size = self.get_config_files_size(target, &task.config_file_patterns);
+                            total += config_size * 2; // backup + restore
+                        }
+                    }
+                    _ => {
+                        // Other addon types don't have backup/restore overhead
+                    }
+                }
+            }
         }
         Ok(total)
+    }
+
+    /// Get total size of config files matching patterns in a directory
+    fn get_config_files_size(&self, dir: &Path, patterns: &[String]) -> u64 {
+        let mut total = 0u64;
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
+                        if matches_any_pattern(name, patterns) {
+                            if let Ok(metadata) = fs::metadata(&path) {
+                                total += metadata.len();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        total
     }
 
     /// Verify that the installation was successful by checking for typical files
     /// and optionally verifying file hashes with retry logic
     /// Returns verification statistics if hash verification was performed
-    fn verify_installation(&self, task: &InstallTask) -> Result<Option<crate::models::VerificationStats>> {
+    fn verify_installation(&self, task: &InstallTask, ctx: &ProgressContext) -> Result<Option<crate::models::VerificationStats>> {
         let target = Path::new(&task.target_path);
 
-        // Phase 1: Basic marker file verification
+        // Phase 1: Basic marker file verification (10% of verification progress)
+        ctx.set_verification_progress(0.0);
+        ctx.emit_progress(Some("Checking marker files...".to_string()), InstallPhase::Verifying);
         self.verify_marker_files(task)?;
+        ctx.set_verification_progress(10.0);
+        ctx.emit_progress(Some("Marker files OK".to_string()), InstallPhase::Verifying);
 
         // Phase 2: Hash verification (if enabled and hashes available)
         if !task.enable_verification {
@@ -474,18 +623,45 @@ impl Installer {
             Some("installer")
         );
 
+        // Update progress: starting hash verification (10% -> 70%)
+        ctx.set_verification_progress(15.0);
+        ctx.emit_progress(Some(format!("Verifying {} files...", total_expected)), InstallPhase::Verifying);
+
         let verifier = crate::verifier::FileVerifier::new();
-        let mut failed_files = verifier.verify_files(target, &expected_hashes)?;
+
+        // Use verification with progress callback
+        // Progress range: 15% -> 70% (55% range for hash verification)
+        let ctx_clone = ctx.clone();
+        let mut failed_files = verifier.verify_files_with_progress(
+            target,
+            &expected_hashes,
+            move |verified, total| {
+                if total > 0 {
+                    // Map verified/total to 15% -> 70% range
+                    let progress = 15.0 + (verified as f64 / total as f64) * 55.0;
+                    ctx_clone.set_verification_progress(progress);
+                    ctx_clone.emit_progress(
+                        Some(format!("Verified {}/{} files", verified, total)),
+                        InstallPhase::Verifying
+                    );
+                }
+            }
+        )?;
+
+        // Update progress: initial verification done (70%)
+        ctx.set_verification_progress(70.0);
 
         let _initial_failed_count = failed_files.len();
         let mut retried_count = 0;
 
-        // Phase 3: Retry failed files (up to 3 times)
+        // Phase 3: Retry failed files (up to 3 times) (70% -> 95%)
         if !failed_files.is_empty() {
             logger::log_info(
                 &format!("Retrying {} failed files (max 3 attempts)", failed_files.len()),
                 Some("installer")
             );
+
+            ctx.emit_progress(Some(format!("Retrying {} files...", failed_files.len())), InstallPhase::Verifying);
 
             retried_count = failed_files.len();
             failed_files = self.retry_failed_files(
@@ -493,9 +669,13 @@ impl Installer {
                 failed_files,
                 &expected_hashes,
             )?;
+
+            ctx.set_verification_progress(95.0);
+        } else {
+            ctx.set_verification_progress(95.0);
         }
 
-        // Phase 4: Final check and build statistics
+        // Phase 4: Final check and build statistics (95% -> 100%)
         if !failed_files.is_empty() {
             self.log_verification_failures(&failed_files);
 
@@ -517,6 +697,9 @@ impl Installer {
             &format!("All {} files verified successfully", total_expected),
             Some("installer")
         );
+
+        ctx.set_verification_progress(100.0);
+        ctx.emit_progress(Some("Verification complete".to_string()), InstallPhase::Verifying);
 
         // Build success statistics
         let stats = crate::models::VerificationStats {
@@ -835,7 +1018,8 @@ impl Installer {
         let mut file_index = None;
         let mut is_encrypted = false;
         for i in 0..archive.len() {
-            let file = archive.by_index(i)?;
+            // Use by_index_raw to avoid triggering decryption errors when reading metadata
+            let file = archive.by_index_raw(i)?;
             let name = file.name().replace('\\', "/");
 
             if name == archive_path_normalized {
@@ -1257,7 +1441,8 @@ impl Installer {
         // Collect all file entries
         let entries: Vec<_> = (0..archive.len())
             .filter_map(|i| {
-                let file = archive.by_index(i).ok()?;
+                // Use by_index_raw to avoid triggering decryption errors when reading metadata
+                let file = archive.by_index_raw(i).ok()?;
                 let path = file.enclosed_name()?.to_path_buf();
                 let file_path_str = path.to_string_lossy().replace('\\', "/");
 
@@ -1947,8 +2132,9 @@ impl Installer {
                             backup.pref_files.push((name.to_string(), backup_path.clone()));
                             backup.original_pref_sizes.push((name.to_string(), original_size));
 
-                            // Update progress for each config file
+                            // Update progress for each config file with filename for real-time display
                             ctx.add_bytes(original_size);
+                            ctx.emit_progress(Some(name.to_string()), InstallPhase::Installing);
                         }
                     }
                 }
@@ -2088,8 +2274,9 @@ impl Installer {
                 fs::copy(backup_path, &target_path)
                     .context(format!("Failed to restore pref file: {}", filename))?;
 
-                // Update progress for each config file
+                // Update progress for each config file with filename for real-time display
                 ctx.add_bytes(size);
+                ctx.emit_progress(Some(filename.clone()), InstallPhase::Installing);
             }
         }
 
@@ -2113,16 +2300,19 @@ impl Installer {
                 // Recursively merge subdirectories
                 self.merge_directory_skip_existing_with_progress(&source_path, &target_path, ctx)?;
             } else {
+                let size = fs::metadata(&source_path)?.len();
+                let display_name = file_name.to_string_lossy().to_string();
+
                 // Only copy if target doesn't exist (skip existing)
                 if !target_path.exists() {
-                    let size = fs::metadata(&source_path)?.len();
                     fs::copy(&source_path, &target_path)?;
                     // Remove read-only attribute from copied file
                     let _ = remove_readonly_attribute(&target_path);
-
-                    // Update progress
-                    ctx.add_bytes(size);
                 }
+
+                // Always update progress (even for skipped files) to keep progress accurate
+                ctx.add_bytes(size);
+                ctx.emit_progress(Some(display_name), InstallPhase::Installing);
             }
         }
 
@@ -2244,7 +2434,8 @@ impl Installer {
         let mut skipped_count = 0;
         let entries: Vec<_> = (0..archive.len())
             .filter_map(|i| {
-                let file = match archive.by_index(i) {
+                // Use by_index_raw to avoid triggering decryption errors when reading metadata
+                let file = match archive.by_index_raw(i) {
                     Ok(f) => f,
                     Err(e) => {
                         logger::log_error(
@@ -2255,6 +2446,10 @@ impl Installer {
                         return None;
                     }
                 };
+
+                let is_encrypted = file.encrypted();
+                let is_dir = file.is_dir();
+                let size = file.size();
 
                 let path = match file.enclosed_name() {
                     Some(p) => p.to_path_buf(),
@@ -2310,7 +2505,7 @@ impl Installer {
                     }
                 };
 
-                Some((i, relative_path, file.is_dir(), file.encrypted(), file.size()))
+                Some((i, relative_path, is_dir, is_encrypted, size))
             })
             .collect();
 
@@ -2398,7 +2593,8 @@ impl Installer {
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::PermissionsExt;
-                    let file = archive.by_index(*index)?;
+                    // Use by_index_raw to get metadata without triggering decryption
+                    let file = archive.by_index_raw(*index)?;
                     if let Some(mode) = file.unix_mode() {
                         fs::set_permissions(&outpath, fs::Permissions::from_mode(mode))?;
                     }
@@ -2410,8 +2606,8 @@ impl Installer {
         Ok(())
     }
 
-    /// Extract 7z archive with progress tracking and optional hash calculation
-    /// Since sevenz-rust2 doesn't provide per-file callbacks, we extract to temp then copy with progress
+    /// Extract 7z archive with progress tracking
+    /// Uses fast batch extraction with a monitoring thread for progress updates
     fn extract_7z_with_progress(
         &self,
         archive: &Path,
@@ -2420,18 +2616,59 @@ impl Installer {
         ctx: &ProgressContext,
         password: Option<&str>,
     ) -> Result<()> {
-        // Create secure temp directory using tempfile crate
+        // Create secure temp directory
         let temp_dir = tempfile::Builder::new()
             .prefix("xfastinstall_7z_")
             .tempdir()
             .context("Failed to create secure temp directory")?;
 
-        // Extract with password if provided
-        if let Some(pwd) = password {
+        let temp_path = temp_dir.path().to_path_buf();
+
+        // Flag to signal monitor thread to stop
+        let stop_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let stop_flag_clone = stop_flag.clone();
+
+        // Clone context for monitor thread
+        let ctx_clone = ctx.clone();
+        let temp_path_clone = temp_path.clone();
+
+        // Start monitoring thread to track extraction progress
+        let monitor_handle = std::thread::spawn(move || {
+            let mut last_size = 0u64;
+
+            while !stop_flag_clone.load(std::sync::atomic::Ordering::SeqCst) {
+                // Calculate current extracted size
+                let current_size = get_directory_size_fast(&temp_path_clone);
+
+                if current_size > last_size {
+                    let delta = current_size - last_size;
+                    ctx_clone.add_bytes(delta);
+
+                    // Get a sample filename for display
+                    let sample_file = get_recent_file(&temp_path_clone);
+                    ctx_clone.emit_progress(sample_file, InstallPhase::Installing);
+
+                    last_size = current_size;
+                }
+
+                // Check every 50ms for responsive progress updates
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+
+            // Final size check
+            let final_size = get_directory_size_fast(&temp_path_clone);
+            if final_size > last_size {
+                let delta = final_size - last_size;
+                ctx_clone.add_bytes(delta);
+            }
+        });
+
+        // Perform extraction
+        let extraction_result = if let Some(pwd) = password {
             let mut reader = sevenz_rust2::SevenZReader::open(archive, sevenz_rust2::Password::from(pwd))
                 .map_err(|e| anyhow::anyhow!("Failed to open 7z with password: {}", e))?;
             reader.for_each_entries(|entry, reader| {
-                let dest_path = temp_dir.path().join(entry.name());
+                let dest_path = temp_path.join(entry.name());
                 if entry.is_directory() {
                     std::fs::create_dir_all(&dest_path)?;
                 } else {
@@ -2442,29 +2679,76 @@ impl Installer {
                     copy_file_optimized(reader, &mut file)?;
                 }
                 Ok(true)
-            }).map_err(|e| anyhow::anyhow!("Failed to extract 7z with password: {}", e))?;
+            }).map_err(|e| anyhow::anyhow!("Failed to extract 7z with password: {}", e))
         } else {
-            sevenz_rust2::decompress_file(archive, temp_dir.path())
-                .map_err(|e| anyhow::anyhow!("Failed to extract 7z: {}", e))?;
-        }
+            sevenz_rust2::decompress_file(archive, &temp_path)
+                .map_err(|e| anyhow::anyhow!("Failed to extract 7z: {}", e))
+        };
+
+        // Stop monitor thread
+        stop_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+        let _ = monitor_handle.join();
+
+        // Check extraction result
+        extraction_result?;
 
         // Determine source path (with or without internal_root)
         let source_path = if let Some(internal_root) = internal_root {
             let internal_root_normalized = internal_root.replace('\\', "/");
-            let path = temp_dir.path().join(&internal_root_normalized);
+            let path = temp_path.join(&internal_root_normalized);
             if path.exists() && path.is_dir() {
                 path
             } else {
-                temp_dir.path().to_path_buf()
+                temp_path
             }
         } else {
-            temp_dir.path().to_path_buf()
+            temp_path
         };
 
-        // Copy with progress tracking
-        self.copy_directory_with_progress(&source_path, target, ctx)?;
+        // Copy to target (progress already tracked during extraction)
+        self.copy_directory_no_progress(&source_path, target)?;
 
-        // TempDir automatically cleans up when dropped
+        Ok(())
+    }
+
+    /// Copy directory without additional progress tracking
+    fn copy_directory_no_progress(&self, source: &Path, target: &Path) -> Result<()> {
+        use rayon::prelude::*;
+
+        if !target.exists() {
+            fs::create_dir_all(target)?;
+        }
+
+        let entries: Vec<_> = walkdir::WalkDir::new(source)
+            .follow_links(false)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .collect();
+
+        // Create directories first
+        for entry in &entries {
+            if entry.file_type().is_dir() {
+                let relative = entry.path().strip_prefix(source)?;
+                let target_path = target.join(relative);
+                fs::create_dir_all(&target_path)?;
+            }
+        }
+
+        // Copy files in parallel
+        entries.par_iter()
+            .filter(|e| e.file_type().is_file())
+            .try_for_each(|entry| -> Result<()> {
+                let relative = entry.path().strip_prefix(source)?;
+                let target_path = target.join(relative);
+
+                let mut src = fs::File::open(entry.path())?;
+                let mut dst = fs::File::create(&target_path)?;
+                copy_file_optimized(&mut src, &mut dst)?;
+                let _ = remove_readonly_attribute(&target_path);
+
+                Ok(())
+            })?;
+
         Ok(())
     }
 
@@ -2490,7 +2774,7 @@ impl Installer {
 
         let mut computed_hashes = std::collections::HashMap::new();
 
-        // Extract with password if provided, computing hashes
+        // Extract with password if provided (must use for_each_entries for password support)
         if let Some(pwd) = password {
             let mut reader = sevenz_rust2::SevenZReader::open(archive, sevenz_rust2::Password::from(pwd))
                 .map_err(|e| anyhow::anyhow!("Failed to open 7z with password: {}", e))?;
@@ -2548,8 +2832,7 @@ impl Installer {
                 Ok(true)
             }).map_err(|e| anyhow::anyhow!("Failed to extract 7z with password: {}", e))?;
         } else {
-            // Without password, we need to use a different approach
-            // Extract first, then compute hashes
+            // Use fast batch extraction for non-password archives
             sevenz_rust2::decompress_file(archive, temp_dir.path())
                 .map_err(|e| anyhow::anyhow!("Failed to extract 7z: {}", e))?;
 

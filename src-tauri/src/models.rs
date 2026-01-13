@@ -145,6 +145,7 @@ pub struct DetectedItem {
 #[serde(rename_all = "camelCase")]
 pub struct InstallProgress {
     /// Overall progress percentage (0.0 - 100.0)
+    /// Installation takes 90%, verification takes 10%
     pub percentage: f64,
     /// Total bytes to process
     pub total_bytes: u64,
@@ -160,6 +161,9 @@ pub struct InstallProgress {
     pub current_file: Option<String>,
     /// Current phase
     pub phase: InstallPhase,
+    /// Verification progress (0.0 - 100.0), only used during Verifying phase
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verification_progress: Option<f64>,
 }
 
 /// Installation phase

@@ -80,7 +80,7 @@ export interface ConflictInfo {
   newVersion?: string;
 }
 
-export type InstallPhase = 'Calculating' | 'Installing' | 'Finalizing';
+export type InstallPhase = 'calculating' | 'installing' | 'verifying' | 'finalizing';
 
 export interface InstallProgress {
   percentage: number;
@@ -89,8 +89,10 @@ export interface InstallProgress {
   currentTaskIndex: number;
   totalTasks: number;
   currentTaskName: string;
-  currentFile?: string;
+  currentFile?: string | null;
   phase: InstallPhase;
+  /** Verification progress (0-100), only present during verifying phase */
+  verificationProgress?: number;
 }
 
 export interface TaskResult {

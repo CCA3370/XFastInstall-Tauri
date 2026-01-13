@@ -35,7 +35,7 @@
       </transition>
 
       <!-- Main Action Area (Flexible Height) -->
-      <div class="flex-1 min-h-0 overflow-hidden bg-white/60 dark:bg-gray-800/40 backdrop-blur-xl border-2 border-dashed border-gray-300 dark:border-gray-600/50 rounded-2xl p-6 text-center transition-all duration-500 hover:border-blue-400 dark:hover:border-blue-500/50 hover:bg-white/80 dark:hover:bg-gray-800/60 shadow-sm dark:shadow-none flex flex-col items-center justify-center relative drop-zone-card"
+      <div class="flex-1 min-h-0 bg-white/60 dark:bg-gray-800/40 backdrop-blur-xl border-2 border-dashed border-gray-300 dark:border-gray-600/50 rounded-2xl p-6 text-center transition-all duration-500 hover:border-blue-400 dark:hover:border-blue-500/50 hover:bg-white/80 dark:hover:bg-gray-800/60 shadow-sm dark:shadow-none flex flex-col items-center justify-center relative drop-zone-card"
         :class="{
           'drag-over ring-4 ring-4-blue-500/20 border-blue-500 scale-[1.02]': isDragging && !store.showCompletion,
           'animate-pulse border-blue-400': store.isAnalyzing,
@@ -124,13 +124,24 @@
                 <!-- Circular Progress -->
                 <div class="relative w-20 h-20 mx-auto">
                   <svg class="w-full h-full -rotate-90" viewBox="0 0 80 80">
+                    <!-- SVG filter for glow effect -->
+                    <defs>
+                      <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+                        <feGaussianBlur stdDeviation="2" result="blur"/>
+                        <feMerge>
+                          <feMergeNode in="blur"/>
+                          <feMergeNode in="SourceGraphic"/>
+                        </feMerge>
+                      </filter>
+                    </defs>
                     <circle cx="40" cy="40" r="36" stroke-width="5" fill="none"
                       class="text-emerald-500/20 dark:text-emerald-500/30" stroke="currentColor"/>
                     <circle cx="40" cy="40" r="36" stroke-width="5" fill="none"
                       class="text-emerald-500 dark:text-emerald-400 progress-circle" stroke="currentColor"
                       :stroke-dasharray="226"
                       :stroke-dashoffset="226 - 226 * (parseFloat(progressStore.formatted.percentage) / 100)"
-                      stroke-linecap="round"/>
+                      stroke-linecap="round"
+                      filter="url(#glow)"/>
                   </svg>
                   <span class="absolute inset-0 flex items-center justify-center text-lg font-bold text-emerald-600 dark:text-emerald-400 progress-text">
                     {{ progressStore.formatted.percentage }}%
@@ -141,13 +152,18 @@
                 <div class="text-center">
                   <h3 class="text-xl font-bold text-gray-900 dark:text-white"><AnimatedText>{{ $t('home.installing') }}</AnimatedText></h3>
                   <p class="text-sm text-gray-600 dark:text-gray-300 mt-1 transition-opacity duration-150">{{ progressStore.formatted.taskName }}</p>
-                  <p class="text-xs text-gray-400 dark:text-gray-500 truncate max-w-xs mx-auto mt-0.5 transition-opacity duration-150">{{ progressStore.formatted.currentFile }}</p>
                 </div>
 
                 <!-- Linear Progress Bar -->
                 <div class="w-full max-w-xs mx-auto">
-                  <div class="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                    <div class="h-full bg-emerald-500 dark:bg-emerald-400 progress-bar"
+                  <div class="relative h-1.5 my-2">
+                    <!-- Background track -->
+                    <div class="absolute inset-0 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+                    <!-- Glow effect layer (behind the bar) -->
+                    <div class="absolute inset-y-0 left-0 rounded-full progress-bar-glow"
+                      :style="{ width: progressStore.formatted.percentage + '%' }"/>
+                    <!-- Progress fill -->
+                    <div class="absolute inset-y-0 left-0 bg-emerald-500 dark:bg-emerald-400 rounded-full progress-bar"
                       :style="{ width: progressStore.formatted.percentage + '%' }"/>
                   </div>
                   <div class="flex justify-between text-xs text-gray-400 dark:text-gray-500 mt-1">
@@ -545,7 +561,7 @@ async function handlePasswordSubmit(passwords: Record<string, string>) {
 }
 
 // Handle password modal cancel
-function handlePasswordCancel() {
+async function handlePasswordCancel() {
   showPasswordModal.value = false
   logOperation(t('log.taskAborted'), t('log.passwordCanceled'))
 
@@ -558,7 +574,7 @@ function handlePasswordCancel() {
 
   // 如果有不需要密码的文件，继续分析它们
   if (nonPasswordPaths.length > 0) {
-    analyzeFiles(nonPasswordPaths)
+    await analyzeFiles(nonPasswordPaths)
   }
 }
 
@@ -631,6 +647,12 @@ async function handleInstall() {
           logError(`${r.taskName}: ${r.errorMessage}`, 'installation')
         })
     }
+
+    // Ensure progress bar shows 100% before transitioning
+    progressStore.setPercentage(100)
+
+    // Wait 1 second at 100% before showing completion view
+    await new Promise(resolve => setTimeout(resolve, 1000))
 
     // Set isInstalling to false before showing completion to ensure smooth transition
     store.isInstalling = false
@@ -755,18 +777,31 @@ function handleCompletionConfirm() {
   will-change: width;
 }
 
+.progress-bar-glow {
+  transition: width 50ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: width;
+  background: theme('colors.emerald.500');
+  filter: blur(6px);
+  opacity: 0.7;
+}
+
+.dark .progress-bar-glow {
+  background: theme('colors.emerald.400');
+  opacity: 0.8;
+}
+
 .progress-text {
   transition: opacity 100ms ease-out;
   will-change: opacity;
 }
 
-/* Optimized pulse animation with proper overflow handling */
+/* Optimized pulse animation - uses opacity instead of drop-shadow to avoid overflow clipping */
 @keyframes progress-pulse {
   0%, 100% {
-    filter: drop-shadow(0 0 3px currentColor);
+    opacity: 1;
   }
   50% {
-    filter: drop-shadow(0 0 10px currentColor);
+    opacity: 0.6;
   }
 }
 

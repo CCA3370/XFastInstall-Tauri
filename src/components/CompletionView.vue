@@ -119,6 +119,11 @@ function getSimpleErrorReason(errorMessage?: string): string {
 
   const msg = errorMessage.toLowerCase()
 
+  // Password issues (check first, as password errors may cause other failures)
+  if (msg.includes('password') || msg.includes('密码') || msg.includes('encrypted')) {
+    return t('completion.passwordError')
+  }
+
   // Verification failures
   if (msg.includes('verification failed') || msg.includes('校验失败')) {
     return t('completion.verificationFailed')
@@ -137,11 +142,6 @@ function getSimpleErrorReason(errorMessage?: string): string {
   // File not found
   if (msg.includes('not found') || msg.includes('找不到')) {
     return t('completion.fileNotFound')
-  }
-
-  // Password issues
-  if (msg.includes('password') || msg.includes('密码')) {
-    return t('completion.passwordError')
   }
 
   // Extraction/Archive issues

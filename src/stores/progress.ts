@@ -58,10 +58,33 @@ export const useProgressStore = defineStore('progress', () => {
     progress.value = null
   }
 
+  // Set percentage directly (used to ensure 100% is shown before completion)
+  function setPercentage(percentage: number) {
+    if (progress.value) {
+      progress.value = {
+        ...progress.value,
+        percentage
+      }
+    } else {
+      // Create a minimal progress object if none exists
+      progress.value = {
+        percentage,
+        totalBytes: 0,
+        processedBytes: 0,
+        currentTaskIndex: 0,
+        totalTasks: 1,
+        currentTaskName: '',
+        currentFile: null,
+        phase: 'finalizing'
+      }
+    }
+  }
+
   return {
     progress,
     formatted,
     update,
     reset,
+    setPercentage,
   }
 })

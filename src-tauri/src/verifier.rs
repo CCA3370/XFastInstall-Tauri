@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use sha2::{Sha256, Digest};
 use rayon::prelude::*;
 
@@ -27,6 +29,20 @@ impl FileVerifier {
         target_dir: &Path,
         expected_hashes: &HashMap<String, FileHash>,
     ) -> Result<Vec<FileVerificationResult>> {
+        self.verify_files_with_progress(target_dir, expected_hashes, |_, _| {})
+    }
+
+    /// Verify all files with progress callback
+    /// progress_callback receives (verified_count, total_count)
+    pub fn verify_files_with_progress<F>(
+        &self,
+        target_dir: &Path,
+        expected_hashes: &HashMap<String, FileHash>,
+        progress_callback: F,
+    ) -> Result<Vec<FileVerificationResult>>
+    where
+        F: Fn(usize, usize) + Send + Sync,
+    {
         use walkdir::WalkDir;
 
         crate::logger::log_info(
@@ -54,13 +70,22 @@ impl FileVerifier {
             })
             .collect();
 
-        // Parallel verification
+        let total = files_to_verify.len();
+        let verified_count = Arc::new(AtomicUsize::new(0));
+
+        // Parallel verification with progress tracking
         let results: Vec<FileVerificationResult> = files_to_verify
             .par_iter()
             .filter_map(|(path, relative_path)| {
                 // Get expected hash (should always exist since we built files_to_verify from expected_hashes)
                 let expected = expected_hashes.get(relative_path)?;
-                Some(self.verify_single_file(path, relative_path, expected))
+                let result = self.verify_single_file(path, relative_path, expected);
+
+                // Update progress
+                let count = verified_count.fetch_add(1, Ordering::SeqCst) + 1;
+                progress_callback(count, total);
+
+                Some(result)
             })
             .collect();
 
