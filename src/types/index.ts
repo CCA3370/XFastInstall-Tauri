@@ -26,6 +26,12 @@ export interface ExtractionChain {
   finalInternalRoot?: string;
 }
 
+export interface NavdataInfo {
+  name: string;
+  cycle?: string;
+  airac?: string;
+}
+
 export interface InstallTask {
   id: string;
   type: AddonType;

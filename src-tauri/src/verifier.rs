@@ -12,6 +12,7 @@ use crate::models::{FileHash, FileVerificationResult, HashAlgorithm, Verificatio
 
 pub struct FileVerifier {
     /// Maximum retry attempts per file
+    #[allow(dead_code)]
     max_retries: u8,
 }
 
@@ -24,6 +25,7 @@ impl FileVerifier {
 
     /// Verify all files in target directory against expected hashes
     /// Returns list of failed files (empty if all passed)
+    #[allow(dead_code)]
     pub fn verify_files(
         &self,
         target_dir: &Path,
@@ -204,6 +206,7 @@ impl FileVerifier {
     }
 
     /// Build verification statistics
+    #[allow(dead_code)]
     pub fn build_stats(
         &self,
         total_expected: usize,

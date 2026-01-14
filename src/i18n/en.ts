@@ -8,6 +8,7 @@ export default {
     confirm: 'Confirm',
     close: 'Close',
     install: 'Install',
+    delete: 'Delete',
     error: 'Error',
     success: 'Success',
     warning: 'Warning',

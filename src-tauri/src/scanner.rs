@@ -2,8 +2,8 @@ use anyhow::{Context, Result};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
 
+use crate::logger;
 use crate::models::{AddonType, DetectedItem, ExtractionChain, NavdataCycle, NavdataInfo, NestedArchiveInfo};
 
 /// Error indicating that password is required for an encrypted archive
@@ -162,6 +162,15 @@ impl Scanner {
         false
     }
 
+    /// Fast check for archive paths (string-based, avoids Path allocation)
+    #[inline]
+    fn should_ignore_archive_path(path: &str) -> bool {
+        path.contains("__MACOSX") ||
+        path.contains(".DS_Store") ||
+        path.ends_with("Thumbs.db") ||
+        path.ends_with("desktop.ini")
+    }
+
     /// Scan a path (file or directory) and detect all addon types
     pub fn scan_path(&self, path: &Path, password: Option<&str>) -> Result<Vec<DetectedItem>> {
         let mut ctx = ScanContext::new();
@@ -203,132 +212,148 @@ impl Scanner {
         }
     }
 
-    /// Scan a directory recursively
+    /// Scan a directory using breadth-first (level-by-level) traversal
+    /// When a marker file is found, the entire addon root directory is skipped
     fn scan_directory(&self, dir: &Path) -> Result<Vec<DetectedItem>> {
+        use std::collections::VecDeque;
+
         let mut detected = Vec::new();
         let mut plugin_dirs: HashSet<PathBuf> = HashSet::new();
         let mut skip_dirs: HashSet<PathBuf> = HashSet::new();
 
-        // First pass: Find all plugin directories
-        // This ensures .acf/.dsf files inside plugins are not detected as separate addons
-        for entry in WalkDir::new(dir)
-            .follow_links(false)
-            .max_depth(15)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            let path = entry.path();
+        // Queue for breadth-first traversal: (directory_path, current_depth)
+        let mut queue: VecDeque<(PathBuf, usize)> = VecDeque::new();
+        queue.push_back((dir.to_path_buf(), 0));
 
-            // Skip ignored paths
-            if Self::should_ignore_path(path) {
+        const MAX_DEPTH: usize = 15;
+
+        while let Some((current_dir, depth)) = queue.pop_front() {
+            if depth > MAX_DEPTH {
                 continue;
             }
 
-            if !entry.file_type().is_file() {
-                continue;
-            }
-
-            // Check for .xpl files to identify plugin directories
-            if path.extension().and_then(|s| s.to_str()) == Some("xpl") {
-                let parent = path.parent();
-                if let Some(p) = parent {
-                    let parent_name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
-
-                    // Check if parent is platform-specific folder
-                    let plugin_root = if matches!(
-                        parent_name,
-                        "32" | "64" | "win" | "lin" | "mac" | "win_x64" | "mac_x64" | "lin_x64"
-                    ) {
-                        // Go up one more level
-                        p.parent().unwrap_or(p).to_path_buf()
-                    } else {
-                        p.to_path_buf()
-                    };
-
-                    plugin_dirs.insert(plugin_root);
-                }
-            }
-        }
-
-        // Second pass: Detect all addon types, skipping files inside plugin directories
-        let mut walker = WalkDir::new(dir)
-            .follow_links(false)
-            .max_depth(15)
-            .into_iter();
-
-        while let Some(entry) = walker.next() {
-            let entry = entry?;
-            let path = entry.path();
-
-            // Skip ignored paths (__MACOSX, .DS_Store, etc.)
-            if Self::should_ignore_path(path) {
-                if entry.file_type().is_dir() {
-                    walker.skip_current_dir();
-                }
-                continue;
-            }
-
-            // Check if path is within a detected plugin directory
-            // Skip .acf and .dsf files inside plugin directories
-            let is_inside_plugin = plugin_dirs.iter().any(|plugin_dir| {
-                path.starts_with(plugin_dir) && path != plugin_dir
+            // Check if this directory should be skipped
+            let should_skip = skip_dirs.iter().any(|skip_dir| {
+                current_dir.starts_with(skip_dir) && current_dir != *skip_dir
             });
 
-            // Check if path is within a skip directory
-            let mut should_skip = false;
-            for skip_dir in &skip_dirs {
-                if path.starts_with(skip_dir) && path != skip_dir {
-                    should_skip = true;
-                    break;
-                }
-            }
-
             if should_skip {
-                if entry.file_type().is_dir() {
-                    walker.skip_current_dir();
+                continue;
+            }
+
+            // Skip ignored paths
+            if Self::should_ignore_path(&current_dir) {
+                continue;
+            }
+
+            // Read directory entries
+            let entries = match fs::read_dir(&current_dir) {
+                Ok(entries) => entries,
+                Err(_) => continue,
+            };
+
+            // Separate files and subdirectories
+            let mut files: Vec<PathBuf> = Vec::new();
+            let mut subdirs: Vec<PathBuf> = Vec::new();
+
+            for entry in entries.flatten() {
+                let path = entry.path();
+
+                // Skip ignored paths
+                if Self::should_ignore_path(&path) {
+                    continue;
                 }
-                continue;
+
+                if path.is_file() {
+                    files.push(path);
+                } else if path.is_dir() {
+                    subdirs.push(path);
+                }
             }
 
-            if !entry.file_type().is_file() {
-                continue;
+            // First pass on files: identify plugin directories
+            for file_path in &files {
+                if file_path.extension().and_then(|s| s.to_str()) == Some("xpl") {
+                    if let Some(parent) = file_path.parent() {
+                        let parent_name = parent.file_name().and_then(|s| s.to_str()).unwrap_or("");
+
+                        // Check if parent is platform-specific folder
+                        let plugin_root = if matches!(
+                            parent_name,
+                            "32" | "64" | "win" | "lin" | "mac" | "win_x64" | "mac_x64" | "lin_x64"
+                        ) {
+                            parent.parent().unwrap_or(parent).to_path_buf()
+                        } else {
+                            parent.to_path_buf()
+                        };
+
+                        plugin_dirs.insert(plugin_root);
+                    }
+                }
             }
 
-            // Check for different addon types based on file markers
-            // Skip .acf and .dsf if they're inside plugin directories
-            let file_ext = path.extension().and_then(|s| s.to_str());
+            // Second pass on files: detect addons
+            for file_path in &files {
+                // Check if inside a detected plugin directory
+                let is_inside_plugin = plugin_dirs.iter().any(|plugin_dir| {
+                    file_path.starts_with(plugin_dir) && file_path != plugin_dir
+                });
 
-            if (file_ext == Some("acf") || file_ext == Some("dsf")) && is_inside_plugin {
+                // Check if inside a skip directory
+                let is_inside_skip = skip_dirs.iter().any(|skip_dir| {
+                    file_path.starts_with(skip_dir) && file_path != skip_dir
+                });
+
+                if is_inside_skip {
+                    continue;
+                }
+
+                let file_ext = file_path.extension().and_then(|s| s.to_str());
+
                 // Skip .acf/.dsf files inside plugin directories
-                continue;
+                if (file_ext == Some("acf") || file_ext == Some("dsf")) && is_inside_plugin {
+                    continue;
+                }
+
+                // Check for addon markers
+                if let Some(item) = self.check_aircraft(file_path, dir)? {
+                    let root = PathBuf::from(&item.path);
+                    skip_dirs.insert(root);
+                    detected.push(item);
+                    continue;
+                }
+
+                if let Some(item) = self.check_scenery(file_path, dir)? {
+                    let root = PathBuf::from(&item.path);
+                    skip_dirs.insert(root);
+                    detected.push(item);
+                    continue;
+                }
+
+                if let Some(item) = self.check_plugin(file_path, dir)? {
+                    let root = PathBuf::from(&item.path);
+                    skip_dirs.insert(root);
+                    detected.push(item);
+                    continue;
+                }
+
+                if let Some(item) = self.check_navdata(file_path, dir)? {
+                    let root = PathBuf::from(&item.path);
+                    skip_dirs.insert(root);
+                    detected.push(item);
+                    continue;
+                }
             }
 
-            if let Some(item) = self.check_aircraft(path, dir)? {
-                let root = PathBuf::from(&item.path);
-                skip_dirs.insert(root);
-                detected.push(item);
-                continue;
-            }
+            // Add subdirectories to queue (only if not in skip_dirs)
+            for subdir in subdirs {
+                let should_skip_subdir = skip_dirs.iter().any(|skip_dir| {
+                    subdir.starts_with(skip_dir)
+                });
 
-            if let Some(item) = self.check_scenery(path, dir)? {
-                let root = PathBuf::from(&item.path);
-                skip_dirs.insert(root);
-                detected.push(item);
-                continue;
-            }
-
-            if let Some(item) = self.check_plugin(path, dir)? {
-                let root = PathBuf::from(&item.path);
-                skip_dirs.insert(root);
-                detected.push(item);
-                continue;
-            }
-
-            if let Some(item) = self.check_navdata(path, dir)? {
-                let root = PathBuf::from(&item.path);
-                skip_dirs.insert(root);
-                detected.push(item);
-                continue;
+                if !should_skip_subdir {
+                    queue.push_back((subdir, depth + 1));
+                }
             }
         }
 
@@ -336,6 +361,7 @@ impl Scanner {
     }
 
     /// Scan archive without full extraction
+    #[allow(dead_code)]
     fn scan_archive(&self, archive_path: &Path, password: Option<&str>) -> Result<Vec<DetectedItem>> {
         let extension = archive_path.extension()
             .and_then(|s| s.to_str())
@@ -354,62 +380,289 @@ impl Scanner {
         }
     }
 
-    /// Scan a 7z archive with context (supports nested archives via temp extraction)
+    /// Scan a 7z archive with context (supports nested archives)
+    /// OPTIMIZED: Single pass to collect both addon markers and nested archives
     fn scan_7z_with_context(&self, archive_path: &Path, ctx: &mut ScanContext, password: Option<&str>) -> Result<Vec<DetectedItem>> {
-        
+        let scan_start = std::time::Instant::now();
+        crate::log_debug!(
+            &format!("[TIMING] 7z scan started: {}", archive_path.display()),
+            "scanner_timing"
+        );
 
-        // First, scan the archive normally for direct addon markers
-        let mut detected = self.scan_7z(archive_path, password)?;
+        // Open archive to read file list (fast, no decompression)
+        let open_start = std::time::Instant::now();
+        let archive = sevenz_rust2::Archive::open(archive_path)
+            .map_err(|e| anyhow::anyhow!("Failed to open 7z archive: {}", e))?;
+        crate::log_debug!(
+            &format!("[TIMING] 7z open completed in {:.2}ms: {}",
+                open_start.elapsed().as_secs_f64() * 1000.0,
+                archive_path.display()
+            ),
+            "scanner_timing"
+        );
 
-        // If we can recurse and there are nested archives, extract and scan them
-        if ctx.can_recurse() {
-            // Open archive to list files
-            let archive = sevenz_rust2::Archive::open(archive_path)
-                .map_err(|e| anyhow::anyhow!("Failed to open 7z archive: {}", e))?;
+        // Check for empty archive
+        if archive.files.is_empty() {
+            logger::log_info(
+                &format!("Empty 7z archive: {}", archive_path.display()),
+                Some("scanner"),
+            );
+            return Ok(Vec::new());
+        }
 
-            // Find nested archives
-            let nested_archives: Vec<String> = archive.files
-                .iter()
-                .filter_map(|entry| {
-                    let name = entry.name();
-                    if !entry.is_directory() && is_archive_file(name) {
-                        Some(name.to_string())
-                    } else {
-                        None
-                    }
-                })
-                .collect();
+        // Check if archive has encrypted files by examining headers
+        let has_encrypted_headers = archive.files.iter().any(|f| f.has_stream() && !f.is_directory());
 
-            // Scan each nested archive
-            for nested_path in nested_archives {
-                if Self::should_ignore_path(Path::new(&nested_path)) {
-                    continue;
-                }
+        // Only do the slow encryption check if no password provided and archive might be encrypted
+        if password.is_none() && has_encrypted_headers {
+            let encrypt_check_start = std::time::Instant::now();
+            crate::log_debug!(
+                "[TIMING] 7z encryption check started",
+                "scanner_timing"
+            );
 
-                match self.scan_nested_archive_in_7z(
-                    archive_path,
-                    &nested_path,
-                    ctx,
-                    password,
-                ) {
-                    Ok(nested_items) => {
-                        detected.extend(nested_items);
-                    }
-                    Err(e) => {
-                        if let Some(_) = e.downcast_ref::<PasswordRequiredError>() {
-                            return Err(anyhow::anyhow!(NestedPasswordRequiredError {
-                                parent_archive: archive_path.to_string_lossy().to_string(),
-                                nested_archive: nested_path.clone(),
-                            }));
+            match sevenz_rust2::SevenZReader::open(archive_path, sevenz_rust2::Password::empty()) {
+                Ok(mut reader) => {
+                    let mut encryption_detected = false;
+                    let _ = reader.for_each_entries(|entry, reader| {
+                        if !entry.is_directory() {
+                            let mut buf = [0u8; 1];
+                            if std::io::Read::read(reader, &mut buf).is_err() {
+                                encryption_detected = true;
+                            }
+                            return Ok(false);
                         }
-                        crate::logger::log_info(
-                            &format!("Failed to scan nested archive {}: {}", nested_path, e),
-                            Some("scanner"),
-                        );
+                        Ok(true)
+                    });
+
+                    if encryption_detected {
+                        return Err(anyhow::anyhow!(PasswordRequiredError {
+                            archive_path: archive_path.to_string_lossy().to_string(),
+                        }));
+                    }
+                }
+                Err(e) => {
+                    let err_str = format!("{:?}", e);
+                    if err_str.contains("password") || err_str.contains("Password")
+                        || err_str.contains("encrypted") || err_str.contains("WrongPassword") {
+                        return Err(anyhow::anyhow!(PasswordRequiredError {
+                            archive_path: archive_path.to_string_lossy().to_string(),
+                        }));
                     }
                 }
             }
+
+            crate::log_debug!(
+                &format!("[TIMING] 7z encryption check completed in {:.2}ms",
+                    encrypt_check_start.elapsed().as_secs_f64() * 1000.0
+                ),
+                "scanner_timing"
+            );
         }
+
+        // SINGLE PASS: collect addon markers AND nested archives
+        let enumerate_start = std::time::Instant::now();
+        crate::log_debug!(
+            &format!("[TIMING] 7z enumeration started: {} files", archive.files.len()),
+            "scanner_timing"
+        );
+
+        let mut plugin_dirs: HashSet<String> = HashSet::new();
+        let mut marker_files: Vec<(String, &str)> = Vec::new();
+        let mut nested_archives: Vec<String> = Vec::new();
+
+        for entry in &archive.files {
+            let file_path = entry.name().to_string();
+            let normalized = file_path.replace('\\', "/");
+
+            if Self::should_ignore_archive_path(&normalized) {
+                continue;
+            }
+
+            // Check for nested archives (only if we can recurse)
+            if ctx.can_recurse() && !entry.is_directory() && is_archive_file(&normalized) {
+                nested_archives.push(normalized.clone());
+            }
+
+            // Identify plugin directories and marker files
+            if normalized.ends_with(".xpl") {
+                if let Some(parent) = Path::new(&normalized).parent() {
+                    let parent_str = parent.to_string_lossy();
+                    let parent_name = parent.file_name().and_then(|s| s.to_str()).unwrap_or("");
+
+                    let plugin_root = if matches!(
+                        parent_name,
+                        "32" | "64" | "win" | "lin" | "mac" | "win_x64" | "mac_x64" | "lin_x64"
+                    ) {
+                        parent.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or(parent_str.to_string())
+                    } else {
+                        parent_str.to_string()
+                    };
+                    plugin_dirs.insert(plugin_root);
+                }
+                marker_files.push((normalized, "xpl"));
+            } else if normalized.ends_with(".acf") {
+                marker_files.push((normalized, "acf"));
+            } else if normalized.ends_with("library.txt") {
+                marker_files.push((normalized, "library"));
+            } else if normalized.ends_with(".dsf") {
+                marker_files.push((normalized, "dsf"));
+            } else if normalized.ends_with("cycle.json") {
+                marker_files.push((normalized, "navdata"));
+            }
+        }
+
+        crate::log_debug!(
+            &format!("[TIMING] 7z enumeration completed in {:.2}ms: {} files, {} markers, {} nested archives",
+                enumerate_start.elapsed().as_secs_f64() * 1000.0,
+                archive.files.len(),
+                marker_files.len(),
+                nested_archives.len()
+            ),
+            "scanner_timing"
+        );
+
+        // Sort marker files by depth
+        let sort_start = std::time::Instant::now();
+        marker_files.sort_by(|a, b| {
+            let depth_a = a.0.matches('/').count();
+            let depth_b = b.0.matches('/').count();
+            depth_a.cmp(&depth_b)
+        });
+        crate::log_debug!(
+            &format!("[TIMING] 7z marker sorting completed in {:.2}ms",
+                sort_start.elapsed().as_secs_f64() * 1000.0
+            ),
+            "scanner_timing"
+        );
+
+        let mut detected = Vec::new();
+        let mut skip_prefixes: Vec<String> = Vec::new();
+
+        // Process marker files
+        let process_start = std::time::Instant::now();
+        crate::log_debug!(
+            &format!("[TIMING] 7z marker processing started: {} markers", marker_files.len()),
+            "scanner_timing"
+        );
+
+        for (file_path, marker_type) in marker_files {
+            let should_skip = skip_prefixes.iter().any(|prefix| file_path.starts_with(prefix));
+            if should_skip {
+                continue;
+            }
+
+            if marker_type == "acf" || marker_type == "dsf" {
+                let is_inside_plugin = plugin_dirs.iter().any(|plugin_dir| {
+                    file_path.starts_with(plugin_dir) && file_path.len() > plugin_dir.len()
+                });
+                if is_inside_plugin {
+                    continue;
+                }
+            }
+
+            let item = match marker_type {
+                "acf" => self.detect_aircraft_in_archive(&file_path, archive_path)?,
+                "library" => self.detect_scenery_library(&file_path, archive_path)?,
+                "dsf" => self.detect_scenery_dsf(&file_path, archive_path)?,
+                "xpl" => self.detect_plugin_in_archive(&file_path, archive_path)?,
+                "navdata" => {
+                    if let Ok(content) = self.read_file_from_7z(archive_path, &file_path, password) {
+                        self.detect_navdata_in_archive(&file_path, &content, archive_path)?
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            };
+
+            if let Some(item) = item {
+                if let Some(ref internal_root) = item.archive_internal_root {
+                    let prefix = if internal_root.ends_with('/') {
+                        internal_root.clone()
+                    } else {
+                        format!("{}/", internal_root)
+                    };
+                    skip_prefixes.push(prefix);
+                }
+                detected.push(item);
+            }
+        }
+
+        crate::log_debug!(
+            &format!("[TIMING] 7z marker processing completed in {:.2}ms: {} addons detected",
+                process_start.elapsed().as_secs_f64() * 1000.0,
+                detected.len()
+            ),
+            "scanner_timing"
+        );
+
+        // Scan nested archives
+        if !nested_archives.is_empty() {
+            let nested_start = std::time::Instant::now();
+            let total_nested = nested_archives.len();
+
+            // Filter out nested archives that are inside already detected addon directories
+            let filtered_nested: Vec<_> = nested_archives.into_iter()
+                .filter(|nested_path| {
+                    // Check if this nested archive is inside any detected addon directory
+                    let is_inside_addon = skip_prefixes.iter().any(|prefix| {
+                        nested_path.starts_with(prefix)
+                    });
+                    !is_inside_addon
+                })
+                .collect();
+
+            let filtered_count = filtered_nested.len();
+            let skipped_count = total_nested - filtered_count;
+
+            crate::log_debug!(
+                &format!("[TIMING] 7z nested archive processing started: {} nested archives ({} skipped as inside detected addons)",
+                    filtered_count,
+                    skipped_count
+                ),
+                "scanner_timing"
+            );
+
+            for nested_path in filtered_nested {
+            if Self::should_ignore_path(Path::new(&nested_path)) {
+                continue;
+            }
+
+            match self.scan_nested_archive_in_7z(archive_path, &nested_path, ctx, password) {
+                Ok(nested_items) => {
+                    detected.extend(nested_items);
+                }
+                Err(e) => {
+                    if e.downcast_ref::<PasswordRequiredError>().is_some() {
+                        return Err(anyhow::anyhow!(NestedPasswordRequiredError {
+                            parent_archive: archive_path.to_string_lossy().to_string(),
+                            nested_archive: nested_path.clone(),
+                        }));
+                    }
+                    crate::logger::log_info(
+                        &format!("Failed to scan nested archive {}: {}", nested_path, e),
+                        Some("scanner"),
+                    );
+                }
+            }
+        }
+
+            crate::log_debug!(
+                &format!("[TIMING] 7z nested archive processing completed in {:.2}ms",
+                    nested_start.elapsed().as_secs_f64() * 1000.0
+                ),
+                "scanner_timing"
+            );
+        }
+
+        crate::log_debug!(
+            &format!("[TIMING] 7z scan completed in {:.2}ms: {} total addons detected",
+                scan_start.elapsed().as_secs_f64() * 1000.0,
+                detected.len()
+            ),
+            "scanner_timing"
+        );
 
         Ok(detected)
     }
@@ -587,13 +840,31 @@ impl Scanner {
 
     /// Scan a RAR archive with context (supports nested archives via temp extraction)
     fn scan_rar_with_context(&self, archive_path: &Path, ctx: &mut ScanContext, password: Option<&str>) -> Result<Vec<DetectedItem>> {
-        
+        let scan_start = std::time::Instant::now();
+        crate::log_debug!(
+            &format!("[TIMING] RAR scan started: {}", archive_path.display()),
+            "scanner_timing"
+        );
 
         // First, scan the archive normally for direct addon markers
+        let scan_markers_start = std::time::Instant::now();
         let mut detected = self.scan_rar(archive_path, password)?;
+        crate::log_debug!(
+            &format!("[TIMING] RAR marker scan completed in {:.2}ms: {} addons detected",
+                scan_markers_start.elapsed().as_secs_f64() * 1000.0,
+                detected.len()
+            ),
+            "scanner_timing"
+        );
 
         // If we can recurse and there are nested archives, extract and scan them
         if ctx.can_recurse() {
+            let nested_enum_start = std::time::Instant::now();
+            crate::log_debug!(
+                "[TIMING] RAR nested archive enumeration started",
+                "scanner_timing"
+            );
+
             // Open archive to list files
             let archive_builder = if let Some(pwd) = password {
                 unrar::Archive::with_password(archive_path, pwd)
@@ -621,8 +892,55 @@ impl Scanner {
                 })
                 .collect();
 
+            crate::log_debug!(
+                &format!("[TIMING] RAR nested archive enumeration completed in {:.2}ms: {} nested archives found",
+                    nested_enum_start.elapsed().as_secs_f64() * 1000.0,
+                    nested_archives.len()
+                ),
+                "scanner_timing"
+            );
+
             // Scan each nested archive
-            for nested_path in nested_archives {
+            if !nested_archives.is_empty() {
+                let nested_process_start = std::time::Instant::now();
+                let total_nested = nested_archives.len();
+
+                // Build skip prefixes from already detected addons
+                let skip_prefixes: Vec<String> = detected.iter()
+                    .filter_map(|item| {
+                        item.archive_internal_root.as_ref().map(|root| {
+                            if root.ends_with('/') {
+                                root.clone()
+                            } else {
+                                format!("{}/", root)
+                            }
+                        })
+                    })
+                    .collect();
+
+                // Filter out nested archives that are inside already detected addon directories
+                let filtered_nested: Vec<_> = nested_archives.into_iter()
+                    .filter(|nested_path| {
+                        // Check if this nested archive is inside any detected addon directory
+                        let is_inside_addon = skip_prefixes.iter().any(|prefix| {
+                            nested_path.starts_with(prefix)
+                        });
+                        !is_inside_addon
+                    })
+                    .collect();
+
+                let filtered_count = filtered_nested.len();
+                let skipped_count = total_nested - filtered_count;
+
+                crate::log_debug!(
+                    &format!("[TIMING] RAR nested archive processing started: {} nested archives ({} skipped as inside detected addons)",
+                        filtered_count,
+                        skipped_count
+                    ),
+                    "scanner_timing"
+                );
+
+                for nested_path in filtered_nested {
                 if Self::should_ignore_path(Path::new(&nested_path)) {
                     continue;
                 }
@@ -650,7 +968,23 @@ impl Scanner {
                     }
                 }
             }
+
+                crate::log_debug!(
+                    &format!("[TIMING] RAR nested archive processing completed in {:.2}ms",
+                        nested_process_start.elapsed().as_secs_f64() * 1000.0
+                    ),
+                    "scanner_timing"
+                );
+            }
         }
+
+        crate::log_debug!(
+            &format!("[TIMING] RAR scan completed in {:.2}ms: {} total addons detected",
+                scan_start.elapsed().as_secs_f64() * 1000.0,
+                detected.len()
+            ),
+            "scanner_timing"
+        );
 
         Ok(detected)
     }
@@ -797,55 +1131,54 @@ impl Scanner {
 
     /// Scan a 7z archive without extraction
     fn scan_7z(&self, archive_path: &Path, password: Option<&str>) -> Result<Vec<DetectedItem>> {
-        // sevenz-rust2 can open encrypted archives for listing, but needs password for extraction
-        // We need to test extraction to detect if password is required
+        // Open archive to read file list (fast, no decompression)
         let archive = sevenz_rust2::Archive::open(archive_path)
             .map_err(|e| anyhow::anyhow!("Failed to open 7z archive: {}", e))?;
 
-        // Check if archive is encrypted by attempting to read first file
-        if password.is_none() && !archive.files.is_empty() {
-            // Find first non-directory file
-            let has_files = archive.files.iter().any(|f| !f.is_directory());
+        // Check for empty archive
+        if archive.files.is_empty() {
+            logger::log_info(
+                &format!("Empty 7z archive: {}", archive_path.display()),
+                Some("scanner"),
+            );
+            return Ok(Vec::new());
+        }
 
-            if has_files {
-                // Try to open with empty password to detect encryption
-                let test_result = sevenz_rust2::SevenZReader::open(
-                    archive_path,
-                    sevenz_rust2::Password::empty()
-                );
+        // Check if archive has encrypted files by examining headers
+        // This is faster than trying to read file content
+        let has_encrypted_headers = archive.files.iter().any(|f| f.has_stream() && !f.is_directory());
 
-                match test_result {
-                    Ok(mut reader) => {
-                        // Try to read first entry to trigger password check
-                        let mut encryption_detected = false;
-                        let _read_result = reader.for_each_entries(|entry, reader| {
-                            if !entry.is_directory() && !encryption_detected {
-                                // Try to read just 1 byte to test encryption
-                                let mut buf = [0u8; 1];
-                                if let Err(_) = std::io::Read::read(reader, &mut buf) {
-                                    encryption_detected = true;
-                                    return Ok(false); // Stop iteration
-                                }
-                                Ok(false) // Stop after first file
-                            } else {
-                                Ok(true) // Continue to next entry
+        // Only do the slow encryption check if no password provided and archive might be encrypted
+        if password.is_none() && has_encrypted_headers {
+            // Try a quick open test - if it fails with password error, we know it's encrypted
+            match sevenz_rust2::SevenZReader::open(archive_path, sevenz_rust2::Password::empty()) {
+                Ok(mut reader) => {
+                    // Try to read first non-directory entry
+                    let mut encryption_detected = false;
+                    let _ = reader.for_each_entries(|entry, reader| {
+                        if !entry.is_directory() {
+                            let mut buf = [0u8; 1];
+                            if std::io::Read::read(reader, &mut buf).is_err() {
+                                encryption_detected = true;
                             }
-                        });
+                            return Ok(false); // Stop after first file
+                        }
+                        Ok(true)
+                    });
 
-                        if encryption_detected {
-                            return Err(anyhow::anyhow!(PasswordRequiredError {
-                                archive_path: archive_path.to_string_lossy().to_string(),
-                            }));
-                        }
+                    if encryption_detected {
+                        return Err(anyhow::anyhow!(PasswordRequiredError {
+                            archive_path: archive_path.to_string_lossy().to_string(),
+                        }));
                     }
-                    Err(e) => {
-                        let err_str = format!("{:?}", e);
-                        if err_str.contains("password") || err_str.contains("Password")
-                            || err_str.contains("encrypted") || err_str.contains("WrongPassword") {
-                            return Err(anyhow::anyhow!(PasswordRequiredError {
-                                archive_path: archive_path.to_string_lossy().to_string(),
-                            }));
-                        }
+                }
+                Err(e) => {
+                    let err_str = format!("{:?}", e);
+                    if err_str.contains("password") || err_str.contains("Password")
+                        || err_str.contains("encrypted") || err_str.contains("WrongPassword") {
+                        return Err(anyhow::anyhow!(PasswordRequiredError {
+                            archive_path: archive_path.to_string_lossy().to_string(),
+                        }));
                     }
                 }
             }
@@ -853,77 +1186,102 @@ impl Scanner {
 
         let mut detected = Vec::new();
 
-        // Collect all file paths from the archive
-        let files: Vec<String> = archive.files
-            .iter()
-            .map(|entry| entry.name().to_string())
-            .collect();
+        // Collect file paths and identify markers in a single pass
+        let mut plugin_dirs: HashSet<String> = HashSet::new();
+        let mut marker_files: Vec<(String, &str)> = Vec::new(); // (path, marker_type)
 
-        // Identify all plugin directories first
-        let mut plugin_dirs: HashSet<PathBuf> = HashSet::new();
-        for file_path in &files {
-            if file_path.ends_with(".xpl") {
-                let path = PathBuf::from(file_path);
-                if let Some(parent) = path.parent() {
+        for entry in &archive.files {
+            let file_path = entry.name().to_string();
+            let normalized = file_path.replace('\\', "/");
+
+            // Skip ignored paths
+            if Self::should_ignore_archive_path(&normalized) {
+                continue;
+            }
+
+            // Identify plugin directories
+            if normalized.ends_with(".xpl") {
+                if let Some(parent) = Path::new(&normalized).parent() {
+                    let parent_str = parent.to_string_lossy();
                     let parent_name = parent.file_name().and_then(|s| s.to_str()).unwrap_or("");
 
-                    // Check if parent is platform-specific folder
                     let plugin_root = if matches!(
                         parent_name,
                         "32" | "64" | "win" | "lin" | "mac" | "win_x64" | "mac_x64" | "lin_x64"
                     ) {
-                        // Go up one more level
-                        parent.parent().unwrap_or(parent).to_path_buf()
+                        parent.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or(parent_str.to_string())
                     } else {
-                        parent.to_path_buf()
+                        parent_str.to_string()
                     };
-
                     plugin_dirs.insert(plugin_root);
                 }
+                marker_files.push((normalized, "xpl"));
+            } else if normalized.ends_with(".acf") {
+                marker_files.push((normalized, "acf"));
+            } else if normalized.ends_with("library.txt") {
+                marker_files.push((normalized, "library"));
+            } else if normalized.ends_with(".dsf") {
+                marker_files.push((normalized, "dsf"));
+            } else if normalized.ends_with("cycle.json") {
+                marker_files.push((normalized, "navdata"));
             }
         }
 
-        // Process files, skipping .acf/.dsf inside plugin directories
-        for file_path in &files {
-            // Skip ignored paths (__MACOSX, .DS_Store, etc.)
-            let path = Path::new(file_path);
-            if Self::should_ignore_path(path) {
+        // Sort marker files by depth (process shallower paths first)
+        marker_files.sort_by(|a, b| {
+            let depth_a = a.0.matches('/').count();
+            let depth_b = b.0.matches('/').count();
+            depth_a.cmp(&depth_b)
+        });
+
+        // Track detected addon roots to skip
+        let mut skip_prefixes: Vec<String> = Vec::new();
+
+        // Process marker files
+        for (file_path, marker_type) in marker_files {
+            // Check if inside a skip prefix (already detected addon)
+            let should_skip = skip_prefixes.iter().any(|prefix| file_path.starts_with(prefix));
+            if should_skip {
                 continue;
             }
 
-            // Check if this file is inside a plugin directory
-            let is_inside_plugin = plugin_dirs.iter().any(|plugin_dir| {
-                path.starts_with(plugin_dir) && path != plugin_dir
-            });
-
-            // Skip .acf and .dsf files inside plugin directories
-            if (file_path.ends_with(".acf") || file_path.ends_with(".dsf")) && is_inside_plugin {
-                continue;
+            // Check if .acf/.dsf is inside a plugin directory
+            if marker_type == "acf" || marker_type == "dsf" {
+                let is_inside_plugin = plugin_dirs.iter().any(|plugin_dir| {
+                    file_path.starts_with(plugin_dir) && file_path.len() > plugin_dir.len()
+                });
+                if is_inside_plugin {
+                    continue;
+                }
             }
 
-            if file_path.ends_with(".acf") {
-                if let Some(item) = self.detect_aircraft_in_archive(file_path, archive_path)? {
-                    detected.push(item);
-                }
-            } else if file_path.ends_with("library.txt") {
-                if let Some(item) = self.detect_scenery_library(file_path, archive_path)? {
-                    detected.push(item);
-                }
-            } else if file_path.ends_with(".dsf") {
-                if let Some(item) = self.detect_scenery_dsf(file_path, archive_path)? {
-                    detected.push(item);
-                }
-            } else if file_path.ends_with(".xpl") {
-                if let Some(item) = self.detect_plugin_in_archive(file_path, archive_path)? {
-                    detected.push(item);
-                }
-            } else if file_path.ends_with("cycle.json") {
-                // For 7z, we need to extract this single file to read its content
-                if let Ok(content) = self.read_file_from_7z(archive_path, file_path, password) {
-                    if let Some(item) = self.detect_navdata_in_archive(file_path, &content, archive_path)? {
-                        detected.push(item);
+            // Detect addon based on marker type
+            let item = match marker_type {
+                "acf" => self.detect_aircraft_in_archive(&file_path, archive_path)?,
+                "library" => self.detect_scenery_library(&file_path, archive_path)?,
+                "dsf" => self.detect_scenery_dsf(&file_path, archive_path)?,
+                "xpl" => self.detect_plugin_in_archive(&file_path, archive_path)?,
+                "navdata" => {
+                    if let Ok(content) = self.read_file_from_7z(archive_path, &file_path, password) {
+                        self.detect_navdata_in_archive(&file_path, &content, archive_path)?
+                    } else {
+                        None
                     }
                 }
+                _ => None,
+            };
+
+            if let Some(item) = item {
+                // Add to skip prefixes
+                if let Some(ref internal_root) = item.archive_internal_root {
+                    let prefix = if internal_root.ends_with('/') {
+                        internal_root.clone()
+                    } else {
+                        format!("{}/", internal_root)
+                    };
+                    skip_prefixes.push(prefix);
+                }
+                detected.push(item);
             }
         }
 
@@ -973,6 +1331,12 @@ impl Scanner {
 
     /// Scan a RAR archive without extraction
     fn scan_rar(&self, archive_path: &Path, password: Option<&str>) -> Result<Vec<DetectedItem>> {
+        let open_start = std::time::Instant::now();
+        crate::log_debug!(
+            &format!("[TIMING] RAR open started: {}", archive_path.display()),
+            "scanner_timing"
+        );
+
         // Create archive with or without password
         let archive_builder = if let Some(pwd) = password {
             unrar::Archive::with_password(archive_path, pwd)
@@ -999,83 +1363,165 @@ impl Scanner {
                 }
             })?;
 
-        let mut detected = Vec::new();
+        crate::log_debug!(
+            &format!("[TIMING] RAR open completed in {:.2}ms",
+                open_start.elapsed().as_secs_f64() * 1000.0
+            ),
+            "scanner_timing"
+        );
+
         let mut files: Vec<String> = Vec::new();
 
         // Collect all file paths
+        let enumerate_start = std::time::Instant::now();
         for entry in archive {
             if let Ok(e) = entry {
-                files.push(e.filename.to_string_lossy().to_string());
+                files.push(e.filename.to_string_lossy().to_string().replace('\\', "/"));
             }
         }
 
-        // Identify all plugin directories first
-        let mut plugin_dirs: HashSet<PathBuf> = HashSet::new();
+        crate::log_debug!(
+            &format!("[TIMING] RAR enumeration completed in {:.2}ms: {} files",
+                enumerate_start.elapsed().as_secs_f64() * 1000.0,
+                files.len()
+            ),
+            "scanner_timing"
+        );
+
+        // Check for empty archive
+        if files.is_empty() {
+            logger::log_info(
+                &format!("Empty RAR archive: {}", archive_path.display()),
+                Some("scanner"),
+            );
+            return Ok(Vec::new());
+        }
+
+        // Single pass: identify plugin directories and marker files
+        let marker_identify_start = std::time::Instant::now();
+        let mut plugin_dirs: HashSet<String> = HashSet::new();
+        let mut marker_files: Vec<(String, &str)> = Vec::new(); // (path, marker_type)
+
         for file_path in &files {
+            // Skip ignored paths
+            if Self::should_ignore_archive_path(file_path) {
+                continue;
+            }
+
+            // Identify plugin directories and marker files
             if file_path.ends_with(".xpl") {
-                let path = PathBuf::from(file_path);
-                if let Some(parent) = path.parent() {
+                if let Some(parent) = Path::new(file_path).parent() {
+                    let parent_str = parent.to_string_lossy();
                     let parent_name = parent.file_name().and_then(|s| s.to_str()).unwrap_or("");
 
-                    // Check if parent is platform-specific folder
                     let plugin_root = if matches!(
                         parent_name,
                         "32" | "64" | "win" | "lin" | "mac" | "win_x64" | "mac_x64" | "lin_x64"
                     ) {
-                        // Go up one more level
-                        parent.parent().unwrap_or(parent).to_path_buf()
+                        parent.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or(parent_str.to_string())
                     } else {
-                        parent.to_path_buf()
+                        parent_str.to_string()
                     };
-
                     plugin_dirs.insert(plugin_root);
                 }
+                marker_files.push((file_path.clone(), "xpl"));
+            } else if file_path.ends_with(".acf") {
+                marker_files.push((file_path.clone(), "acf"));
+            } else if file_path.ends_with("library.txt") {
+                marker_files.push((file_path.clone(), "library"));
+            } else if file_path.ends_with(".dsf") {
+                marker_files.push((file_path.clone(), "dsf"));
+            } else if file_path.ends_with("cycle.json") {
+                marker_files.push((file_path.clone(), "navdata"));
             }
         }
 
-        // Process files, skipping .acf/.dsf inside plugin directories
-        for file_path in &files {
-            // Skip ignored paths (__MACOSX, .DS_Store, etc.)
-            let path = Path::new(file_path);
-            if Self::should_ignore_path(path) {
+        crate::log_debug!(
+            &format!("[TIMING] RAR marker identification completed in {:.2}ms: {} markers",
+                marker_identify_start.elapsed().as_secs_f64() * 1000.0,
+                marker_files.len()
+            ),
+            "scanner_timing"
+        );
+
+        // Sort marker files by depth (process shallower paths first)
+        let sort_start = std::time::Instant::now();
+        marker_files.sort_by(|a, b| {
+            let depth_a = a.0.matches('/').count();
+            let depth_b = b.0.matches('/').count();
+            depth_a.cmp(&depth_b)
+        });
+        crate::log_debug!(
+            &format!("[TIMING] RAR marker sorting completed in {:.2}ms",
+                sort_start.elapsed().as_secs_f64() * 1000.0
+            ),
+            "scanner_timing"
+        );
+
+        let mut detected = Vec::new();
+        let mut skip_prefixes: Vec<String> = Vec::new();
+
+        // Process marker files
+        let process_start = std::time::Instant::now();
+        crate::log_debug!(
+            &format!("[TIMING] RAR marker processing started: {} markers", marker_files.len()),
+            "scanner_timing"
+        );
+
+        for (file_path, marker_type) in marker_files {
+            // Check if inside a skip prefix (already detected addon)
+            let should_skip = skip_prefixes.iter().any(|prefix| file_path.starts_with(prefix));
+            if should_skip {
                 continue;
             }
 
-            // Check if this file is inside a plugin directory
-            let is_inside_plugin = plugin_dirs.iter().any(|plugin_dir| {
-                path.starts_with(plugin_dir) && path != plugin_dir
-            });
-
-            // Skip .acf and .dsf files inside plugin directories
-            if (file_path.ends_with(".acf") || file_path.ends_with(".dsf")) && is_inside_plugin {
-                continue;
+            // Check if .acf/.dsf is inside a plugin directory
+            if marker_type == "acf" || marker_type == "dsf" {
+                let is_inside_plugin = plugin_dirs.iter().any(|plugin_dir| {
+                    file_path.starts_with(plugin_dir) && file_path.len() > plugin_dir.len()
+                });
+                if is_inside_plugin {
+                    continue;
+                }
             }
 
-            if file_path.ends_with(".acf") {
-                if let Some(item) = self.detect_aircraft_in_archive(file_path, archive_path)? {
-                    detected.push(item);
-                }
-            } else if file_path.ends_with("library.txt") {
-                if let Some(item) = self.detect_scenery_library(file_path, archive_path)? {
-                    detected.push(item);
-                }
-            } else if file_path.ends_with(".dsf") {
-                if let Some(item) = self.detect_scenery_dsf(file_path, archive_path)? {
-                    detected.push(item);
-                }
-            } else if file_path.ends_with(".xpl") {
-                if let Some(item) = self.detect_plugin_in_archive(file_path, archive_path)? {
-                    detected.push(item);
-                }
-            } else if file_path.ends_with("cycle.json") {
-                // For RAR, we need to extract this single file to read its content
-                if let Ok(content) = self.read_file_from_rar(archive_path, file_path, password) {
-                    if let Some(item) = self.detect_navdata_in_archive(file_path, &content, archive_path)? {
-                        detected.push(item);
+            // Detect addon based on marker type
+            let item = match marker_type {
+                "acf" => self.detect_aircraft_in_archive(&file_path, archive_path)?,
+                "library" => self.detect_scenery_library(&file_path, archive_path)?,
+                "dsf" => self.detect_scenery_dsf(&file_path, archive_path)?,
+                "xpl" => self.detect_plugin_in_archive(&file_path, archive_path)?,
+                "navdata" => {
+                    if let Ok(content) = self.read_file_from_rar(archive_path, &file_path, password) {
+                        self.detect_navdata_in_archive(&file_path, &content, archive_path)?
+                    } else {
+                        None
                     }
                 }
+                _ => None,
+            };
+
+            if let Some(item) = item {
+                // Add to skip prefixes
+                if let Some(ref internal_root) = item.archive_internal_root {
+                    let prefix = if internal_root.ends_with('/') {
+                        internal_root.clone()
+                    } else {
+                        format!("{}/", internal_root)
+                    };
+                    skip_prefixes.push(prefix);
+                }
+                detected.push(item);
             }
         }
+
+        crate::log_debug!(
+            &format!("[TIMING] RAR marker processing completed in {:.2}ms: {} addons detected",
+                process_start.elapsed().as_secs_f64() * 1000.0,
+                detected.len()
+            ),
+            "scanner_timing"
+        );
 
         Ok(detected)
     }
@@ -1123,60 +1569,125 @@ impl Scanner {
     }
 
     /// Scan a ZIP archive with context (supports nested archives)
+    /// OPTIMIZED: Single pass to collect both addon markers and nested archives
     fn scan_zip_with_context(&self, zip_path: &Path, ctx: &mut ScanContext, password: Option<&str>) -> Result<Vec<DetectedItem>> {
         use zip::ZipArchive;
+        use std::io::Read;
 
+        let scan_start = std::time::Instant::now();
+        crate::log_debug!(
+            &format!("[TIMING] ZIP scan started: {}", zip_path.display()),
+            "scanner_timing"
+        );
+
+        let open_start = std::time::Instant::now();
         let file = fs::File::open(zip_path)?;
         let mut archive = ZipArchive::new(file)?;
-        let mut detected = Vec::new();
+        crate::log_debug!(
+            &format!("[TIMING] ZIP open completed in {:.2}ms: {}",
+                open_start.elapsed().as_secs_f64() * 1000.0,
+                zip_path.display()
+            ),
+            "scanner_timing"
+        );
+
+        // Check for empty archive
+        if archive.len() == 0 {
+            logger::log_info(
+                &format!("Empty ZIP archive: {}", zip_path.display()),
+                Some("scanner"),
+            );
+            return Ok(Vec::new());
+        }
 
         // Convert password to bytes if provided
         let password_bytes = password.map(|p| p.as_bytes());
 
-        // First pass: collect file info and check for encryption
-        let mut files_info = Vec::new();
-        let mut nested_archives = Vec::new(); // Track nested archives
+        // SINGLE PASS: collect file info, check encryption, identify markers, AND find nested archives
+        let enumerate_start = std::time::Instant::now();
+        crate::log_debug!(
+            &format!("[TIMING] ZIP enumeration started: {} files", archive.len()),
+            "scanner_timing"
+        );
+
+        let mut plugin_dirs: HashSet<String> = HashSet::new();
+        let mut marker_files: Vec<(usize, String, bool, &str)> = Vec::new(); // (index, path, encrypted, marker_type)
+        let mut nested_archives: Vec<(usize, String, bool)> = Vec::new(); // (index, path, encrypted)
         let mut has_encrypted = false;
 
         for i in 0..archive.len() {
-            // Use by_index_raw to avoid triggering decryption errors
-            match archive.by_index_raw(i) {
-                Ok(file) => {
-                    let name = file.name().to_string();
-
-                    if file.encrypted() {
-                        has_encrypted = true;
-                    }
-
-                    // Check if this is a nested archive
-                    if !file.is_dir() && is_archive_file(&name) {
-                        nested_archives.push((i, name.clone(), file.encrypted()));
-                    }
-
-                    files_info.push((i, name, file.encrypted()));
-                }
+            let file = match archive.by_index_raw(i) {
+                Ok(f) => f,
                 Err(e) => {
-                    // Check if error is related to encryption/password
                     let err_str = format!("{:?}", e);
                     if err_str.contains("password") || err_str.contains("Password")
-                        || err_str.contains("encrypted") || err_str.contains("Encrypted")
-                        || err_str.contains("InvalidPassword") || err_str.contains("decrypt") {
-                        // This is an encryption error - request password if not provided
+                        || err_str.contains("encrypted") || err_str.contains("InvalidPassword") {
                         if password_bytes.is_none() {
                             return Err(anyhow::anyhow!(PasswordRequiredError {
                                 archive_path: zip_path.to_string_lossy().to_string(),
                             }));
                         } else {
-                            // Password was provided but still failed - wrong password
                             return Err(anyhow::anyhow!("Wrong password for archive: {}", zip_path.display()));
                         }
-                    } else {
-                        // Other error - propagate it
-                        return Err(anyhow::anyhow!("Failed to read ZIP entry {}: {}", i, e));
                     }
+                    return Err(anyhow::anyhow!("Failed to read ZIP entry {}: {}", i, e));
                 }
+            };
+
+            let is_encrypted = file.encrypted();
+            if is_encrypted {
+                has_encrypted = true;
+            }
+
+            let file_path = file.name().replace('\\', "/");
+
+            // Skip ignored paths
+            if Self::should_ignore_archive_path(&file_path) {
+                continue;
+            }
+
+            // Check if this is a nested archive (for recursive scanning)
+            if !file.is_dir() && is_archive_file(&file_path) {
+                nested_archives.push((i, file_path.clone(), is_encrypted));
+            }
+
+            // Identify plugin directories and marker files
+            if file_path.ends_with(".xpl") {
+                if let Some(parent) = Path::new(&file_path).parent() {
+                    let parent_str = parent.to_string_lossy();
+                    let parent_name = parent.file_name().and_then(|s| s.to_str()).unwrap_or("");
+
+                    let plugin_root = if matches!(
+                        parent_name,
+                        "32" | "64" | "win" | "lin" | "mac" | "win_x64" | "mac_x64" | "lin_x64"
+                    ) {
+                        parent.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or(parent_str.to_string())
+                    } else {
+                        parent_str.to_string()
+                    };
+                    plugin_dirs.insert(plugin_root);
+                }
+                marker_files.push((i, file_path, is_encrypted, "xpl"));
+            } else if file_path.ends_with(".acf") {
+                marker_files.push((i, file_path, is_encrypted, "acf"));
+            } else if file_path.ends_with("library.txt") {
+                marker_files.push((i, file_path, is_encrypted, "library"));
+            } else if file_path.ends_with(".dsf") {
+                marker_files.push((i, file_path, is_encrypted, "dsf"));
+            } else if file_path.ends_with("cycle.json") {
+                marker_files.push((i, file_path, is_encrypted, "navdata"));
             }
         }
+
+        crate::log_debug!(
+            &format!("[TIMING] ZIP enumeration completed in {:.2}ms: {} files, {} markers, {} nested archives",
+                enumerate_start.elapsed().as_secs_f64() * 1000.0,
+                archive.len(),
+                marker_files.len(),
+                nested_archives.len()
+            ),
+            "scanner_timing"
+        );
 
         // If any file is encrypted but no password provided, request password
         if has_encrypted && password_bytes.is_none() {
@@ -1185,13 +1696,132 @@ impl Scanner {
             }));
         }
 
-        // Scan for addon markers using existing logic (call original scan_zip)
-        // We'll reopen the archive for the original scan
-        detected.extend(self.scan_zip(zip_path, password)?);
+        // Sort marker files by depth (process shallower paths first)
+        let sort_start = std::time::Instant::now();
+        marker_files.sort_by(|a, b| {
+            let depth_a = a.1.matches('/').count();
+            let depth_b = b.1.matches('/').count();
+            depth_a.cmp(&depth_b)
+        });
+        crate::log_debug!(
+            &format!("[TIMING] ZIP marker sorting completed in {:.2}ms",
+                sort_start.elapsed().as_secs_f64() * 1000.0
+            ),
+            "scanner_timing"
+        );
 
-        // NEW: Recursively scan nested archives if depth allows
+        let mut detected = Vec::new();
+        let mut skip_prefixes: Vec<String> = Vec::new();
+
+        // Process marker files to detect addons
+        let process_start = std::time::Instant::now();
+        crate::log_debug!(
+            &format!("[TIMING] ZIP marker processing started: {} markers", marker_files.len()),
+            "scanner_timing"
+        );
+
+        for (i, file_path, is_encrypted, marker_type) in marker_files {
+            // Check if inside a skip prefix (already detected addon)
+            let should_skip = skip_prefixes.iter().any(|prefix| file_path.starts_with(prefix));
+            if should_skip {
+                continue;
+            }
+
+            // Check if .acf/.dsf is inside a plugin directory
+            if marker_type == "acf" || marker_type == "dsf" {
+                let is_inside_plugin = plugin_dirs.iter().any(|plugin_dir| {
+                    file_path.starts_with(plugin_dir) && file_path.len() > plugin_dir.len()
+                });
+                if is_inside_plugin {
+                    continue;
+                }
+            }
+
+            // Detect addon based on marker type
+            let item = match marker_type {
+                "acf" => self.detect_aircraft_in_archive(&file_path, zip_path)?,
+                "library" => self.detect_scenery_library(&file_path, zip_path)?,
+                "dsf" => self.detect_scenery_dsf(&file_path, zip_path)?,
+                "xpl" => self.detect_plugin_in_archive(&file_path, zip_path)?,
+                "navdata" => {
+                    // Need to read cycle.json content
+                    let mut content = String::new();
+
+                    let read_ok = if is_encrypted {
+                        if let Some(pwd) = password_bytes {
+                            match archive.by_index_decrypt(i, pwd) {
+                                Ok(mut f) => f.read_to_string(&mut content).is_ok(),
+                                Err(_) => false,
+                            }
+                        } else {
+                            continue;
+                        }
+                    } else {
+                        match archive.by_index(i) {
+                            Ok(mut f) => f.read_to_string(&mut content).is_ok(),
+                            Err(_) => false,
+                        }
+                    };
+
+                    if read_ok {
+                        self.detect_navdata_in_archive(&file_path, &content, zip_path)?
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            };
+
+            if let Some(item) = item {
+                // Add to skip prefixes
+                if let Some(ref internal_root) = item.archive_internal_root {
+                    let prefix = if internal_root.ends_with('/') {
+                        internal_root.clone()
+                    } else {
+                        format!("{}/", internal_root)
+                    };
+                    skip_prefixes.push(prefix);
+                }
+                detected.push(item);
+            }
+        }
+
+        crate::log_debug!(
+            &format!("[TIMING] ZIP marker processing completed in {:.2}ms: {} addons detected",
+                process_start.elapsed().as_secs_f64() * 1000.0,
+                detected.len()
+            ),
+            "scanner_timing"
+        );
+
+        // Recursively scan nested archives if depth allows
         if ctx.can_recurse() && !nested_archives.is_empty() {
-            for (index, nested_path, is_encrypted) in nested_archives {
+            let nested_start = std::time::Instant::now();
+            let total_nested = nested_archives.len();
+
+            // Filter out nested archives that are inside already detected addon directories
+            let filtered_nested: Vec<_> = nested_archives.into_iter()
+                .filter(|(_, nested_path, _)| {
+                    // Check if this nested archive is inside any detected addon directory
+                    let is_inside_addon = skip_prefixes.iter().any(|prefix| {
+                        nested_path.starts_with(prefix)
+                    });
+                    !is_inside_addon
+                })
+                .collect();
+
+            let filtered_count = filtered_nested.len();
+            let skipped_count = total_nested - filtered_count;
+
+            crate::log_debug!(
+                &format!("[TIMING] ZIP nested archive processing started: {} nested archives ({} skipped as inside detected addons)",
+                    filtered_count,
+                    skipped_count
+                ),
+                "scanner_timing"
+            );
+
+            for (index, nested_path, is_encrypted) in filtered_nested {
                 // Skip if inside ignored paths
                 if Self::should_ignore_path(Path::new(&nested_path)) {
                     continue;
@@ -1226,7 +1856,22 @@ impl Scanner {
                     }
                 }
             }
+
+            crate::log_debug!(
+                &format!("[TIMING] ZIP nested archive processing completed in {:.2}ms",
+                    nested_start.elapsed().as_secs_f64() * 1000.0
+                ),
+                "scanner_timing"
+            );
         }
+
+        crate::log_debug!(
+            &format!("[TIMING] ZIP scan completed in {:.2}ms: {} total addons detected",
+                scan_start.elapsed().as_secs_f64() * 1000.0,
+                detected.len()
+            ),
+            "scanner_timing"
+        );
 
         Ok(detected)
     }
@@ -1469,46 +2114,92 @@ impl Scanner {
 
         let file = fs::File::open(zip_path)?;
         let mut archive = ZipArchive::new(file)?;
-        let mut detected = Vec::new();
+
+        // Check for empty archive
+        if archive.len() == 0 {
+            logger::log_info(
+                &format!("Empty ZIP archive: {}", zip_path.display()),
+                Some("scanner"),
+            );
+            return Ok(Vec::new());
+        }
 
         // Convert password to bytes if provided
         let password_bytes = password.map(|p| p.as_bytes());
 
-        // First pass: collect file info and check for encryption
-        let mut files_info = Vec::new();
+        // Single pass: collect file info, check encryption, and identify markers
+        let enumerate_start = std::time::Instant::now();
+        let mut plugin_dirs: HashSet<String> = HashSet::new();
+        let mut marker_files: Vec<(usize, String, bool, &str)> = Vec::new(); // (index, path, encrypted, marker_type)
         let mut has_encrypted = false;
 
-        // Try to read archive entries - if this fails due to encryption, request password
         for i in 0..archive.len() {
-            match archive.by_index_raw(i) {
-                Ok(file) => {
-                    if file.encrypted() {
-                        has_encrypted = true;
-                    }
-                    files_info.push((i, file.name().to_string(), file.encrypted()));
-                }
+            let file = match archive.by_index_raw(i) {
+                Ok(f) => f,
                 Err(e) => {
-                    // Check if error is related to encryption/password
                     let err_str = format!("{:?}", e);
                     if err_str.contains("password") || err_str.contains("Password")
-                        || err_str.contains("encrypted") || err_str.contains("Encrypted")
-                        || err_str.contains("InvalidPassword") || err_str.contains("decrypt") {
-                        // This is an encryption error - request password if not provided
+                        || err_str.contains("encrypted") || err_str.contains("InvalidPassword") {
                         if password_bytes.is_none() {
                             return Err(anyhow::anyhow!(PasswordRequiredError {
                                 archive_path: zip_path.to_string_lossy().to_string(),
                             }));
                         } else {
-                            // Password was provided but still failed - wrong password
                             return Err(anyhow::anyhow!("Wrong password for archive: {}", zip_path.display()));
                         }
-                    } else {
-                        // Other error - propagate it
-                        return Err(anyhow::anyhow!("Failed to read ZIP entry {}: {}", i, e));
                     }
+                    return Err(anyhow::anyhow!("Failed to read ZIP entry {}: {}", i, e));
                 }
+            };
+
+            let is_encrypted = file.encrypted();
+            if is_encrypted {
+                has_encrypted = true;
+            }
+
+            let file_path = file.name().replace('\\', "/");
+
+            // Skip ignored paths
+            if Self::should_ignore_archive_path(&file_path) {
+                continue;
+            }
+
+            // Identify plugin directories and marker files
+            if file_path.ends_with(".xpl") {
+                if let Some(parent) = Path::new(&file_path).parent() {
+                    let parent_str = parent.to_string_lossy();
+                    let parent_name = parent.file_name().and_then(|s| s.to_str()).unwrap_or("");
+
+                    let plugin_root = if matches!(
+                        parent_name,
+                        "32" | "64" | "win" | "lin" | "mac" | "win_x64" | "mac_x64" | "lin_x64"
+                    ) {
+                        parent.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or(parent_str.to_string())
+                    } else {
+                        parent_str.to_string()
+                    };
+                    plugin_dirs.insert(plugin_root);
+                }
+                marker_files.push((i, file_path, is_encrypted, "xpl"));
+            } else if file_path.ends_with(".acf") {
+                marker_files.push((i, file_path, is_encrypted, "acf"));
+            } else if file_path.ends_with("library.txt") {
+                marker_files.push((i, file_path, is_encrypted, "library"));
+            } else if file_path.ends_with(".dsf") {
+                marker_files.push((i, file_path, is_encrypted, "dsf"));
+            } else if file_path.ends_with("cycle.json") {
+                marker_files.push((i, file_path, is_encrypted, "navdata"));
             }
         }
+
+        crate::log_debug!(
+            &format!("[TIMING] ZIP enumeration completed in {:.2}ms: {} files, {} markers",
+                enumerate_start.elapsed().as_secs_f64() * 1000.0,
+                archive.len(),
+                marker_files.len(),
+            ),
+            "scanner_timing"
+        );
 
         // If any file is encrypted but no password provided, request password
         if has_encrypted && password_bytes.is_none() {
@@ -1517,95 +2208,81 @@ impl Scanner {
             }));
         }
 
-        // Identify all plugin directories first
-        let mut plugin_dirs: HashSet<PathBuf> = HashSet::new();
-        for (_, file_path, _) in &files_info {
-            if file_path.ends_with(".xpl") {
-                let path = PathBuf::from(file_path);
-                if let Some(parent) = path.parent() {
-                    let parent_name = parent.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        // Sort marker files by depth (process shallower paths first)
+        marker_files.sort_by(|a, b| {
+            let depth_a = a.1.matches('/').count();
+            let depth_b = b.1.matches('/').count();
+            depth_a.cmp(&depth_b)
+        });
 
-                    // Check if parent is platform-specific folder
-                    let plugin_root = if matches!(
-                        parent_name,
-                        "32" | "64" | "win" | "lin" | "mac" | "win_x64" | "mac_x64" | "lin_x64"
-                    ) {
-                        // Go up one more level
-                        parent.parent().unwrap_or(parent).to_path_buf()
-                    } else {
-                        parent.to_path_buf()
-                    };
+        let mut detected = Vec::new();
+        let mut skip_prefixes: Vec<String> = Vec::new();
 
-                    plugin_dirs.insert(plugin_root);
-                }
-            }
-        }
-
-        // Second pass: process files, skipping .acf/.dsf inside plugin directories
-        for (i, file_path, is_encrypted) in files_info {
-            // Skip ignored paths (__MACOSX, .DS_Store, etc.)
-            let path = Path::new(&file_path);
-            if Self::should_ignore_path(path) {
+        // Process marker files
+        for (i, file_path, is_encrypted, marker_type) in marker_files {
+            // Check if inside a skip prefix (already detected addon)
+            let should_skip = skip_prefixes.iter().any(|prefix| file_path.starts_with(prefix));
+            if should_skip {
                 continue;
             }
 
-            // Check if this file is inside a plugin directory
-            let is_inside_plugin = plugin_dirs.iter().any(|plugin_dir| {
-                path.starts_with(plugin_dir) && path != plugin_dir
-            });
-
-            // Skip .acf and .dsf files inside plugin directories
-            if (file_path.ends_with(".acf") || file_path.ends_with(".dsf")) && is_inside_plugin {
-                continue;
+            // Check if .acf/.dsf is inside a plugin directory
+            if marker_type == "acf" || marker_type == "dsf" {
+                let is_inside_plugin = plugin_dirs.iter().any(|plugin_dir| {
+                    file_path.starts_with(plugin_dir) && file_path.len() > plugin_dir.len()
+                });
+                if is_inside_plugin {
+                    continue;
+                }
             }
 
-            // Check for markers in the archive
-            if file_path.ends_with(".acf") {
-                if let Some(item) = self.detect_aircraft_in_archive(&file_path, zip_path)? {
-                    detected.push(item);
-                }
-            } else if file_path.ends_with("library.txt") {
-                if let Some(item) = self.detect_scenery_library(&file_path, zip_path)? {
-                    detected.push(item);
-                }
-            } else if file_path.ends_with(".dsf") {
-                if let Some(item) = self.detect_scenery_dsf(&file_path, zip_path)? {
-                    detected.push(item);
-                }
-            } else if file_path.ends_with(".xpl") {
-                if let Some(item) = self.detect_plugin_in_archive(&file_path, zip_path)? {
-                    detected.push(item);
-                }
-            } else if file_path.ends_with("cycle.json") {
-                // Need to read the file content
-                let mut content = String::new();
-                use std::io::Read;
+            // Detect addon based on marker type
+            let item = match marker_type {
+                "acf" => self.detect_aircraft_in_archive(&file_path, zip_path)?,
+                "library" => self.detect_scenery_library(&file_path, zip_path)?,
+                "dsf" => self.detect_scenery_dsf(&file_path, zip_path)?,
+                "xpl" => self.detect_plugin_in_archive(&file_path, zip_path)?,
+                "navdata" => {
+                    // Need to read cycle.json content
+                    let mut content = String::new();
+                    use std::io::Read;
 
-                // Try to read with or without password
-                if is_encrypted {
-                    if let Some(pwd) = password_bytes {
-                        match archive.by_index_decrypt(i, pwd) {
-                            Ok(mut file) => {
-                                // Successfully decrypted
-                                file.read_to_string(&mut content)?;
+                    let read_ok = if is_encrypted {
+                        if let Some(pwd) = password_bytes {
+                            match archive.by_index_decrypt(i, pwd) {
+                                Ok(mut f) => f.read_to_string(&mut content).is_ok(),
+                                Err(_) => false,
                             }
-                            Err(e) => {
-                                // ZIP error (could be wrong password or other error)
-                                return Err(e.into());
-                            }
+                        } else {
+                            continue;
                         }
                     } else {
-                        // Should not reach here due to earlier check
-                        continue;
-                    }
-                } else {
-                    let mut file = archive.by_index(i)?;
-                    file.read_to_string(&mut content)?;
-                }
+                        match archive.by_index(i) {
+                            Ok(mut f) => f.read_to_string(&mut content).is_ok(),
+                            Err(_) => false,
+                        }
+                    };
 
-                if let Some(item) = self.detect_navdata_in_archive(&file_path, &content, zip_path)? {
-                    detected.push(item);
+                    if read_ok {
+                        self.detect_navdata_in_archive(&file_path, &content, zip_path)?
+                    } else {
+                        None
+                    }
                 }
+                _ => None,
+            };
+
+            if let Some(item) = item {
+                // Add to skip prefixes
+                if let Some(ref internal_root) = item.archive_internal_root {
+                    let prefix = if internal_root.ends_with('/') {
+                        internal_root.clone()
+                    } else {
+                        format!("{}/", internal_root)
+                    };
+                    skip_prefixes.push(prefix);
+                }
+                detected.push(item);
             }
         }
 

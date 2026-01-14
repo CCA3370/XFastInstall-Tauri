@@ -1,31 +1,15 @@
 <template>
-  <div class="completion-view space-y-3">
-    <!-- Icon -->
-    <div class="icon-container">
-      <div v-if="allSuccess" class="w-16 h-16 mx-auto bg-gradient-to-r from-green-500 to-emerald-600 rounded-full flex items-center justify-center">
-        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-        </svg>
-      </div>
-      <div v-else-if="allFailed" class="w-16 h-16 mx-auto bg-gradient-to-r from-red-500 to-red-600 rounded-full flex items-center justify-center">
-        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-        </svg>
-      </div>
-      <div v-else class="w-16 h-16 mx-auto bg-gradient-to-r from-yellow-500 to-orange-600 rounded-full flex items-center justify-center">
-        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
-        </svg>
-      </div>
-    </div>
+  <div class="completion-view">
+    <!-- Icon placeholder (no icon rendered here, animation becomes the icon) -->
+    <div class="icon-container h-20 mb-6"></div>
 
     <!-- Title -->
-    <h2 class="text-xl font-bold text-center text-gray-900 dark:text-white">
+    <h2 class="text-xl font-bold text-center text-gray-900 dark:text-white mb-3">
       <AnimatedText>{{ statusTitle }}</AnimatedText>
     </h2>
 
     <!-- Statistics -->
-    <div class="stats flex justify-center gap-6">
+    <div class="stats flex justify-center gap-6 mb-4">
       <div v-if="!allFailed" class="stat-item text-center">
         <div class="text-2xl font-bold text-green-600 dark:text-green-400">
           {{ result.successfulTasks }}

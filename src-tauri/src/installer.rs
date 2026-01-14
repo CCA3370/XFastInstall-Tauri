@@ -54,61 +54,6 @@ pub fn sanitize_path(path: &Path) -> Option<PathBuf> {
     }
 }
 
-/// Fast directory size calculation for progress monitoring
-/// Uses a simple recursive approach without following symlinks
-fn get_directory_size_fast(path: &Path) -> u64 {
-    let mut total = 0u64;
-    if let Ok(entries) = fs::read_dir(path) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_file() {
-                if let Ok(meta) = fs::metadata(&path) {
-                    total += meta.len();
-                }
-            } else if path.is_dir() {
-                total += get_directory_size_fast(&path);
-            }
-        }
-    }
-    total
-}
-
-/// Get a recently modified file name for progress display
-fn get_recent_file(path: &Path) -> Option<String> {
-    let mut newest: Option<(std::time::SystemTime, String)> = None;
-
-    if let Ok(entries) = fs::read_dir(path) {
-        for entry in entries.flatten() {
-            let entry_path = entry.path();
-            if entry_path.is_file() {
-                if let Ok(meta) = fs::metadata(&entry_path) {
-                    if let Ok(modified) = meta.modified() {
-                        let name = entry_path.file_name()
-                            .and_then(|s| s.to_str())
-                            .unwrap_or("unknown")
-                            .to_string();
-
-                        if let Some((ref newest_time, _)) = newest {
-                            if modified > *newest_time {
-                                newest = Some((modified, name));
-                            }
-                        } else {
-                            newest = Some((modified, name));
-                        }
-                    }
-                }
-            } else if entry_path.is_dir() {
-                // Check subdirectories too
-                if let Some(sub_file) = get_recent_file(&entry_path) {
-                    return Some(sub_file);
-                }
-            }
-        }
-    }
-
-    newest.map(|(_, name)| name)
-}
-
 /// Optimized file copy with buffering for better performance
 /// Uses a larger buffer (4MB) for faster I/O operations
 fn copy_file_optimized<R: std::io::Read + ?Sized, W: std::io::Write>(
@@ -361,6 +306,12 @@ impl Installer {
 
     /// Install a list of tasks with progress reporting
     pub fn install(&self, tasks: Vec<InstallTask>) -> Result<InstallResult> {
+        let install_start = Instant::now();
+        crate::log_debug!(
+            &format!("[TIMING] Installation started: {} tasks", tasks.len()),
+            "installer_timing"
+        );
+
         logger::log_info(
             &format!("{}: {} task(s)", tr(LogMsg::InstallationStarted), tasks.len()),
             Some("installer"),
@@ -372,12 +323,37 @@ impl Installer {
         let mut failed = 0;
 
         // Phase 1: Calculate total size
+        let calc_start = Instant::now();
+        crate::log_debug!(
+            "[TIMING] Size calculation started",
+            "installer_timing"
+        );
         ctx.emit_progress(None, InstallPhase::Calculating);
         let total_size = self.calculate_total_size(&tasks)?;
         ctx.set_total_bytes(total_size);
+        crate::log_debug!(
+            &format!("[TIMING] Size calculation completed in {:.2}ms: {} bytes ({:.2} MB)",
+                calc_start.elapsed().as_secs_f64() * 1000.0,
+                total_size,
+                total_size as f64 / (1024.0 * 1024.0)
+            ),
+            "installer_timing"
+        );
 
         // Phase 2: Install each task
+        let install_phase_start = Instant::now();
+        crate::log_debug!(
+            "[TIMING] Installation phase started",
+            "installer_timing"
+        );
+
         for (index, task) in tasks.iter().enumerate() {
+            let task_start = Instant::now();
+            crate::log_debug!(
+                &format!("[TIMING] Task {} started: {}", index + 1, task.display_name),
+                "installer_timing"
+            );
+
             ctx.current_task_index = index;
             ctx.current_task_name = task.display_name.clone();
             ctx.emit_progress(None, InstallPhase::Installing);
@@ -389,13 +365,48 @@ impl Installer {
 
             match self.install_task_with_progress(task, &ctx) {
                 Ok(_) => {
+                    crate::log_debug!(
+                        &format!("[TIMING] Task {} installation completed in {:.2}ms: {}",
+                            index + 1,
+                            task_start.elapsed().as_secs_f64() * 1000.0,
+                            task.display_name
+                        ),
+                        "installer_timing"
+                    );
+
                     // Verify installation by checking for typical files
+                    let verify_start = Instant::now();
+                    crate::log_debug!(
+                        &format!("[TIMING] Task {} verification started: {}", index + 1, task.display_name),
+                        "installer_timing"
+                    );
+
                     // Reset verification progress for this task
                     ctx.set_verification_progress(0.0);
                     ctx.emit_progress(Some("Verifying...".to_string()), InstallPhase::Verifying);
 
                     match self.verify_installation(task, &ctx) {
                         Ok(verification_stats) => {
+                            crate::log_debug!(
+                                &format!("[TIMING] Task {} verification completed in {:.2}ms: {} (verified: {}, failed: {})",
+                                    index + 1,
+                                    verify_start.elapsed().as_secs_f64() * 1000.0,
+                                    task.display_name,
+                                    verification_stats.as_ref().map(|s| s.verified_files).unwrap_or(0),
+                                    verification_stats.as_ref().map(|s| s.failed_files).unwrap_or(0)
+                                ),
+                                "installer_timing"
+                            );
+
+                            crate::log_debug!(
+                                &format!("[TIMING] Task {} total time: {:.2}ms: {}",
+                                    index + 1,
+                                    task_start.elapsed().as_secs_f64() * 1000.0,
+                                    task.display_name
+                                ),
+                                "installer_timing"
+                            );
+
                             // Set verification to 100% for this task
                             ctx.set_verification_progress(100.0);
                             ctx.emit_progress(None, InstallPhase::Verifying);
@@ -414,6 +425,16 @@ impl Installer {
                             });
                         }
                         Err(verify_err) => {
+                            crate::log_debug!(
+                                &format!("[TIMING] Task {} verification failed in {:.2}ms: {} - {}",
+                                    index + 1,
+                                    verify_start.elapsed().as_secs_f64() * 1000.0,
+                                    task.display_name,
+                                    verify_err
+                                ),
+                                "installer_timing"
+                            );
+
                             failed += 1;
                             let error_msg = format!("Verification failed: {}", verify_err);
                             logger::log_error(
@@ -431,6 +452,16 @@ impl Installer {
                     }
                 }
                 Err(e) => {
+                    crate::log_debug!(
+                        &format!("[TIMING] Task {} installation failed in {:.2}ms: {} - {}",
+                            index + 1,
+                            task_start.elapsed().as_secs_f64() * 1000.0,
+                            task.display_name,
+                            e
+                        ),
+                        "installer_timing"
+                    );
+
                     failed += 1;
                     let error_msg = format!("{}", e);
                     logger::log_error(
@@ -448,9 +479,35 @@ impl Installer {
             }
         }
 
+        crate::log_debug!(
+            &format!("[TIMING] Installation phase completed in {:.2}ms: {} successful, {} failed",
+                install_phase_start.elapsed().as_secs_f64() * 1000.0,
+                successful,
+                failed
+            ),
+            "installer_timing"
+        );
+
         // Phase 3: Finalize
+        let finalize_start = Instant::now();
         ctx.emit_final(InstallPhase::Finalizing);
         logger::log_info(&tr(LogMsg::InstallationCompleted), Some("installer"));
+        crate::log_debug!(
+            &format!("[TIMING] Finalization completed in {:.2}ms",
+                finalize_start.elapsed().as_secs_f64() * 1000.0
+            ),
+            "installer_timing"
+        );
+
+        crate::log_debug!(
+            &format!("[TIMING] Installation completed in {:.2}ms: {} total tasks, {} successful, {} failed",
+                install_start.elapsed().as_secs_f64() * 1000.0,
+                tasks.len(),
+                successful,
+                failed
+            ),
+            "installer_timing"
+        );
 
         Ok(InstallResult {
             total_tasks: tasks.len(),
@@ -1263,27 +1320,55 @@ impl Installer {
         let password = task.password.as_deref();
 
         // Create parent directory if it doesn't exist
+        let mkdir_start = Instant::now();
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent)
                 .context(format!("Failed to create target directory: {:?}", parent))?;
         }
+        crate::log_debug!(
+            &format!("[TIMING] Directory creation completed in {:.2}ms",
+                mkdir_start.elapsed().as_secs_f64() * 1000.0
+            ),
+            "installer_timing"
+        );
 
         // Check if this is a nested archive installation
         if let Some(ref chain) = task.extraction_chain {
+            crate::log_debug!(
+                "[TIMING] Using nested archive extraction path",
+                "installer_timing"
+            );
+
             // Nested archive: use recursive extraction
             if !task.should_overwrite && target.exists() {
                 // Clean install mode for nested archives
+                crate::log_debug!(
+                    "[TIMING] Clean install mode for nested archive",
+                    "installer_timing"
+                );
                 self.handle_clean_install_with_extraction_chain(task, source, target, chain, ctx, password)?;
             } else {
                 // Direct overwrite mode for nested archives
+                crate::log_debug!(
+                    "[TIMING] Direct overwrite mode for nested archive",
+                    "installer_timing"
+                );
                 self.install_content_with_extraction_chain(source, target, chain, ctx, password)?;
             }
         } else {
             // Regular installation (non-nested)
             if !task.should_overwrite && target.exists() {
+                crate::log_debug!(
+                    "[TIMING] Clean install mode for regular archive",
+                    "installer_timing"
+                );
                 // Clean install mode: delete old folder first
                 self.handle_clean_install_with_progress(task, source, target, ctx, password)?;
             } else {
+                crate::log_debug!(
+                    "[TIMING] Direct overwrite mode for regular archive",
+                    "installer_timing"
+                );
                 // Direct overwrite mode: just install/extract files directly
                 self.install_content_with_progress(source, target, task.archive_internal_root.as_deref(), ctx, password)?;
             }
@@ -1367,25 +1452,44 @@ impl Installer {
 
             // Read nested archive into memory
             let nested_path = &archive_info.internal_path;
+            let nested_path_normalized = nested_path.replace('\\', "/");
             let mut nested_data = Vec::new();
 
             // Search for the nested archive
             let mut found = false;
+            let mut decryption_error: Option<String> = None;
+
             for i in 0..archive.len() {
+                // First, check if this is the file we're looking for using raw access
+                let file_name = {
+                    let raw_file = archive.by_index_raw(i)?;
+                    raw_file.name().replace('\\', "/")
+                };
+
+                if file_name != nested_path_normalized {
+                    continue; // Not the file we're looking for
+                }
+
+                // Found the file, now try to read it
                 let mut file = if let Some(pwd) = current_password.as_deref() {
                     match archive.by_index_decrypt(i, pwd) {
                         Ok(f) => f,
-                        Err(_) => continue,
+                        Err(e) => {
+                            decryption_error = Some(format!("Failed to decrypt {}: {}", nested_path, e));
+                            break; // Stop searching, we found the file but can't decrypt
+                        }
                     }
                 } else {
                     archive.by_index(i)?
                 };
 
-                if file.name() == nested_path {
-                    file.read_to_end(&mut nested_data)?;
-                    found = true;
-                    break;
-                }
+                file.read_to_end(&mut nested_data)?;
+                found = true;
+                break;
+            }
+
+            if let Some(err) = decryption_error {
+                return Err(anyhow::anyhow!(err));
             }
 
             if !found {
@@ -1785,6 +1889,7 @@ impl Installer {
     }
 
     /// Move all contents from source directory to target directory
+    #[allow(dead_code)]
     fn move_directory_contents(&self, source: &Path, target: &Path) -> Result<()> {
         for entry in fs::read_dir(source)
             .context(format!("Failed to read source directory: {:?}", source))?
@@ -2393,10 +2498,16 @@ impl Installer {
         ctx: &ProgressContext,
         password: Option<&str>,
     ) -> Result<()> {
+        let extract_start = Instant::now();
         let extension = archive
             .extension()
             .and_then(|s| s.to_str())
             .ok_or_else(|| anyhow::anyhow!("No file extension"))?;
+
+        crate::log_debug!(
+            &format!("[TIMING] Archive extraction started: {} format", extension),
+            "installer_timing"
+        );
 
         match extension {
             "zip" => self.extract_zip_with_progress(archive, target, internal_root, ctx, password)?,
@@ -2404,6 +2515,14 @@ impl Installer {
             "rar" => self.extract_rar_with_progress(archive, target, internal_root, ctx, password)?,
             _ => return Err(anyhow::anyhow!("Unsupported archive format: {}", extension)),
         }
+
+        crate::log_debug!(
+            &format!("[TIMING] Archive extraction completed in {:.2}ms: {} format",
+                extract_start.elapsed().as_secs_f64() * 1000.0,
+                extension
+            ),
+            "installer_timing"
+        );
 
         Ok(())
     }
@@ -2468,13 +2587,27 @@ impl Installer {
 
                 // Check prefix filter
                 let relative_path = if let Some(prefix) = prefix {
-                    if !file_path_str.starts_with(prefix) {
+                    // Ensure prefix ends with '/' for proper directory matching
+                    // This prevents "A330" from matching "A330_variant"
+                    let prefix_with_slash = if prefix.ends_with('/') {
+                        prefix.to_string()
+                    } else {
+                        format!("{}/", prefix)
+                    };
+
+                    // Check if file is inside the prefix directory or is the prefix directory itself
+                    if file_path_str == prefix.trim_end_matches('/') {
+                        // This is the root directory itself, skip it
                         return None;
                     }
+
+                    if !file_path_str.starts_with(&prefix_with_slash) {
+                        return None;
+                    }
+
                     let stripped = file_path_str
-                        .strip_prefix(prefix)
-                        .unwrap_or(&file_path_str)
-                        .trim_start_matches('/');
+                        .strip_prefix(&prefix_with_slash)
+                        .unwrap_or(&file_path_str);
                     if stripped.is_empty() {
                         return None;
                     }
@@ -2607,7 +2740,7 @@ impl Installer {
     }
 
     /// Extract 7z archive with progress tracking
-    /// Uses fast batch extraction with a monitoring thread for progress updates
+    /// Extracts directly to target directory for better performance
     fn extract_7z_with_progress(
         &self,
         archive: &Path,
@@ -2616,144 +2749,91 @@ impl Installer {
         ctx: &ProgressContext,
         password: Option<&str>,
     ) -> Result<()> {
-        // Create secure temp directory
-        let temp_dir = tempfile::Builder::new()
-            .prefix("xfastinstall_7z_")
-            .tempdir()
-            .context("Failed to create secure temp directory")?;
-
-        let temp_path = temp_dir.path().to_path_buf();
-
-        // Flag to signal monitor thread to stop
-        let stop_flag = Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let stop_flag_clone = stop_flag.clone();
-
-        // Clone context for monitor thread
-        let ctx_clone = ctx.clone();
-        let temp_path_clone = temp_path.clone();
-
-        // Start monitoring thread to track extraction progress
-        let monitor_handle = std::thread::spawn(move || {
-            let mut last_size = 0u64;
-
-            while !stop_flag_clone.load(std::sync::atomic::Ordering::SeqCst) {
-                // Calculate current extracted size
-                let current_size = get_directory_size_fast(&temp_path_clone);
-
-                if current_size > last_size {
-                    let delta = current_size - last_size;
-                    ctx_clone.add_bytes(delta);
-
-                    // Get a sample filename for display
-                    let sample_file = get_recent_file(&temp_path_clone);
-                    ctx_clone.emit_progress(sample_file, InstallPhase::Installing);
-
-                    last_size = current_size;
-                }
-
-                // Check every 50ms for responsive progress updates
-                std::thread::sleep(std::time::Duration::from_millis(50));
-            }
-
-            // Final size check
-            let final_size = get_directory_size_fast(&temp_path_clone);
-            if final_size > last_size {
-                let delta = final_size - last_size;
-                ctx_clone.add_bytes(delta);
+        // Normalize internal_root for path matching
+        let internal_root_normalized = internal_root.map(|s| {
+            let normalized = s.replace('\\', "/");
+            if normalized.ends_with('/') {
+                normalized
+            } else {
+                format!("{}/", normalized)
             }
         });
 
-        // Perform extraction
-        let extraction_result = if let Some(pwd) = password {
-            let mut reader = sevenz_rust2::SevenZReader::open(archive, sevenz_rust2::Password::from(pwd))
-                .map_err(|e| anyhow::anyhow!("Failed to open 7z with password: {}", e))?;
-            reader.for_each_entries(|entry, reader| {
-                let dest_path = temp_path.join(entry.name());
-                if entry.is_directory() {
-                    std::fs::create_dir_all(&dest_path)?;
+        // Create target directory
+        fs::create_dir_all(target)?;
+
+        // Open archive with or without password
+        let mut reader = if let Some(pwd) = password {
+            sevenz_rust2::SevenZReader::open(archive, sevenz_rust2::Password::from(pwd))
+                .map_err(|e| anyhow::anyhow!("Failed to open 7z with password: {}", e))?
+        } else {
+            sevenz_rust2::SevenZReader::open(archive, sevenz_rust2::Password::empty())
+                .map_err(|e| anyhow::anyhow!("Failed to open 7z: {}", e))?
+        };
+
+        // Extract directly to target with progress reporting
+        reader.for_each_entries(|entry, entry_reader| {
+            let entry_name = entry.name().replace('\\', "/");
+
+            // Apply internal_root filter
+            let relative_path = if let Some(ref prefix) = internal_root_normalized {
+                if entry_name.starts_with(prefix) {
+                    entry_name.strip_prefix(prefix).unwrap_or(&entry_name)
+                } else if entry_name == prefix.trim_end_matches('/') {
+                    // Skip the root directory itself
+                    return Ok(true);
                 } else {
-                    if let Some(parent) = dest_path.parent() {
-                        std::fs::create_dir_all(parent)?;
-                    }
-                    let mut file = std::fs::File::create(&dest_path)?;
-                    copy_file_optimized(reader, &mut file)?;
+                    // Skip entries outside internal_root
+                    return Ok(true);
                 }
-                Ok(true)
-            }).map_err(|e| anyhow::anyhow!("Failed to extract 7z with password: {}", e))
-        } else {
-            sevenz_rust2::decompress_file(archive, &temp_path)
-                .map_err(|e| anyhow::anyhow!("Failed to extract 7z: {}", e))
-        };
-
-        // Stop monitor thread
-        stop_flag.store(true, std::sync::atomic::Ordering::SeqCst);
-        let _ = monitor_handle.join();
-
-        // Check extraction result
-        extraction_result?;
-
-        // Determine source path (with or without internal_root)
-        let source_path = if let Some(internal_root) = internal_root {
-            let internal_root_normalized = internal_root.replace('\\', "/");
-            let path = temp_path.join(&internal_root_normalized);
-            if path.exists() && path.is_dir() {
-                path
             } else {
-                temp_path
+                &entry_name
+            };
+
+            // Skip empty paths
+            if relative_path.is_empty() {
+                return Ok(true);
             }
-        } else {
-            temp_path
-        };
 
-        // Copy to target (progress already tracked during extraction)
-        self.copy_directory_no_progress(&source_path, target)?;
+            // Sanitize path to prevent path traversal
+            let sanitized = match sanitize_path(Path::new(relative_path)) {
+                Some(p) => p,
+                None => return Ok(true), // Skip unsafe paths
+            };
 
-        Ok(())
-    }
+            let dest_path = target.join(&sanitized);
 
-    /// Copy directory without additional progress tracking
-    fn copy_directory_no_progress(&self, source: &Path, target: &Path) -> Result<()> {
-        use rayon::prelude::*;
+            if entry.is_directory() {
+                std::fs::create_dir_all(&dest_path)?;
+            } else {
+                if let Some(parent) = dest_path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                let mut file = std::fs::File::create(&dest_path)?;
+                copy_file_optimized(entry_reader, &mut file)?;
 
-        if !target.exists() {
-            fs::create_dir_all(target)?;
-        }
+                // Remove read-only attribute
+                let _ = remove_readonly_attribute(&dest_path);
 
-        let entries: Vec<_> = walkdir::WalkDir::new(source)
-            .follow_links(false)
-            .into_iter()
-            .filter_map(|e| e.ok())
-            .collect();
-
-        // Create directories first
-        for entry in &entries {
-            if entry.file_type().is_dir() {
-                let relative = entry.path().strip_prefix(source)?;
-                let target_path = target.join(relative);
-                fs::create_dir_all(&target_path)?;
+                // Report progress
+                let file_size = entry.size() as u64;
+                let file_name = sanitized
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+                ctx.add_bytes(file_size);
+                ctx.emit_progress(Some(file_name), InstallPhase::Installing);
             }
-        }
-
-        // Copy files in parallel
-        entries.par_iter()
-            .filter(|e| e.file_type().is_file())
-            .try_for_each(|entry| -> Result<()> {
-                let relative = entry.path().strip_prefix(source)?;
-                let target_path = target.join(relative);
-
-                let mut src = fs::File::open(entry.path())?;
-                let mut dst = fs::File::create(&target_path)?;
-                copy_file_optimized(&mut src, &mut dst)?;
-                let _ = remove_readonly_attribute(&target_path);
-
-                Ok(())
-            })?;
+            Ok(true)
+        }).map_err(|e| anyhow::anyhow!("Failed to extract 7z: {}", e))?;
 
         Ok(())
     }
 
     /// Extract 7z archive with hash calculation for verification
     /// This is called when we need to compute hashes during extraction
+    #[allow(dead_code)]
     fn extract_7z_with_hash_calculation(
         &self,
         archive: &Path,
@@ -2764,6 +2844,7 @@ impl Installer {
         task: &mut InstallTask,
     ) -> Result<()> {
         use sha2::{Sha256, Digest};
+        #[allow(unused_imports)]
         use std::io::Read;
 
         // Create secure temp directory using tempfile crate

@@ -26,6 +26,7 @@ export const useAppStore = defineStore('app', () => {
   // Installation result state
   const installResult = ref<InstallResult | null>(null)
   const showCompletion = ref(false)
+  const showCompletionAnimation = ref(false)
 
   // Default: all enabled
   const installPreferences = ref<Record<AddonType, boolean>>({
@@ -329,13 +330,20 @@ export const useAppStore = defineStore('app', () => {
   // Set installation result
   function setInstallResult(result: InstallResult) {
     installResult.value = result
+    // First show the completion view (without icon)
     showCompletion.value = true
+    // Small delay to let completion view render, then start animation
+    setTimeout(() => {
+      showCompletionAnimation.value = true
+    }, 50)
+    // Animation stays visible (doesn't hide) - it becomes the completion icon
   }
 
   // Clear installation result
   function clearInstallResult() {
     installResult.value = null
     showCompletion.value = false
+    showCompletionAnimation.value = false
   }
 
   return {
@@ -356,6 +364,7 @@ export const useAppStore = defineStore('app', () => {
     pendingCliArgs,
     installResult,
     showCompletion,
+    showCompletionAnimation,
     setXplanePath,
     loadXplanePath,
     togglePreference,

@@ -179,13 +179,53 @@
               </div>
             </div>
           </div>
+        </transition>
 
-          <div v-else-if="store.showCompletion" key="completion" class="absolute inset-0 z-20 bg-white dark:bg-gray-900 rounded-2xl flex items-center justify-center p-6 transition-colors duration-300 pointer-events-auto">
+        <!-- Completion View (shows behind animation) -->
+        <transition name="fade-in-slow" mode="out-in">
+          <div v-if="store.showCompletion" class="absolute inset-0 z-20 bg-white dark:bg-gray-900 rounded-2xl flex items-center justify-center p-6 transition-colors duration-300 pointer-events-auto">
             <div class="w-full max-w-md">
               <CompletionView
                 :result="store.installResult!"
                 @confirm="handleCompletionConfirm"
               />
+            </div>
+          </div>
+        </transition>
+
+        <!-- Completion Animation Overlay (on top of completion view) -->
+        <transition name="fade">
+          <div v-if="store.showCompletionAnimation" class="absolute inset-0 z-30 flex items-start justify-center pt-[80px] pointer-events-none">
+            <div class="w-full max-w-md">
+                <!-- Success Icon with Animation -->
+                <div v-if="store.installResult && store.installResult.failedTasks === 0" class="relative w-20 h-20 mx-auto">
+                  <!-- Animated checkmark circle -->
+                  <div class="absolute inset-0 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full animate-scale-in flex items-center justify-center shadow-2xl">
+                    <svg class="w-10 h-10 text-white animate-check-draw" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path class="check-path" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                    </svg>
+                  </div>
+                  <!-- Ripple effect -->
+                  <div class="absolute inset-0 bg-green-500 rounded-full animate-ripple opacity-0"></div>
+                </div>
+                <!-- Partial Success Icon -->
+                <div v-else-if="store.installResult && store.installResult.successfulTasks > 0" class="relative w-20 h-20 mx-auto">
+                  <div class="absolute inset-0 bg-gradient-to-r from-yellow-500 to-orange-600 rounded-full animate-scale-in flex items-center justify-center shadow-2xl">
+                    <svg class="w-10 h-10 text-white animate-check-draw" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
+                    </svg>
+                  </div>
+                  <div class="absolute inset-0 bg-yellow-500 rounded-full animate-ripple opacity-0"></div>
+                </div>
+                <!-- Failure Icon -->
+                <div v-else class="relative w-20 h-20 mx-auto">
+                  <div class="absolute inset-0 bg-gradient-to-r from-red-500 to-red-600 rounded-full animate-scale-in flex items-center justify-center shadow-2xl">
+                    <svg class="w-10 h-10 text-white animate-check-draw" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                  </div>
+                  <div class="absolute inset-0 bg-red-500 rounded-full animate-ripple opacity-0"></div>
+                </div>
             </div>
           </div>
         </transition>
@@ -374,12 +414,6 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  // Clear CLI args batch timer to prevent memory leak
-  if (cliArgsBatchTimer) {
-    clearTimeout(cliArgsBatchTimer)
-    cliArgsBatchTimer = null
-  }
-
   window.removeEventListener('dragover', onWindowDragOver)
   window.removeEventListener('dragleave', onWindowDragLeave)
   window.removeEventListener('drop', onWindowDrop)
@@ -623,7 +657,7 @@ async function handleInstall() {
     const tasksWithOverwrite = enabledTasks.map(task => ({
       ...task,
       shouldOverwrite: store.getTaskOverwrite(task.id) ?? false,
-      sizeConfirmed: store.getTaskSizeConfirmed(task.id) ?? false
+      sizeConfirmed: store.getTaskSizeConfirmed(task.id) ?? false,
     }))
 
     const overwriteCount = tasksWithOverwrite.filter(t => t.shouldOverwrite).length
@@ -651,15 +685,15 @@ async function handleInstall() {
     // Ensure progress bar shows 100% before transitioning
     progressStore.setPercentage(100)
 
-    // Wait 1 second at 100% before showing completion view
-    await new Promise(resolve => setTimeout(resolve, 1000))
-
-    // Set isInstalling to false before showing completion to ensure smooth transition
-    store.isInstalling = false
-    progressStore.reset()
-
-    // Save installation result (this will show completion view)
+    // Save installation result immediately (this will trigger the animation)
     store.setInstallResult(result)
+
+    // Keep isInstalling true for a brief moment to show the animation
+    // Then set it to false after animation starts
+    setTimeout(() => {
+      store.isInstalling = false
+      progressStore.reset()
+    }, 100)
 
   } catch (error) {
     console.error('Installation failed:', error)
@@ -807,5 +841,120 @@ function handleCompletionConfirm() {
 
 .progress-circle {
   animation: progress-pulse 2s ease-in-out infinite;
+}
+
+/* Completion Animation Styles */
+@keyframes scale-in {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes scale-in-shrink {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  30% {
+    transform: scale(1.1);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(0.67);
+  }
+}
+
+@keyframes ripple {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+@keyframes check-draw {
+  0% {
+    stroke-dashoffset: 100;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes icon-shrink {
+  0% {
+    transform: scale(1);
+  }
+  60% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.animate-scale-in {
+  animation: scale-in 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+.animate-scale-in-shrink {
+  animation: scale-in-shrink 1.8s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+}
+
+.animate-check-draw .check-path {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: check-draw 0.6s ease-in-out 0.3s forwards;
+}
+
+.animate-icon-shrink {
+  animation: icon-shrink 1.8s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+}
+
+.animate-ripple {
+  animation: ripple 0.8s ease-out 0.2s;
+}
+
+/* Fade out transition for completion animation overlay */
+.fade-out-enter-active,
+.fade-out-leave-active {
+  transition: opacity 0.2s ease-out;
+}
+
+.fade-out-enter-from {
+  opacity: 0;
+}
+
+.fade-out-leave-to {
+  opacity: 0;
+}
+
+/* Slow fade-in transition for completion view */
+.fade-in-slow-enter-active {
+  transition: opacity 0.8s ease-out;
+}
+
+.fade-in-slow-leave-active {
+  transition: opacity 0.5s ease-out;
+}
+
+.fade-in-slow-enter-from,
+.fade-in-slow-leave-to {
+  opacity: 0;
 }
 </style>

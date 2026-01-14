@@ -38,7 +38,9 @@
       "Bash(7z l:*)",
       "Bash(cargo clean:*)",
       "Bash(npx vue-tsc:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(git checkout:*)",
+      "Bash(node -e:*)"
     ]
   }
 }

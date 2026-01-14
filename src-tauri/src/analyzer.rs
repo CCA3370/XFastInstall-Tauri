@@ -314,6 +314,42 @@ impl Analyzer {
         result
     }
 
+    /// Normalize a path for password lookup
+    /// Converts backslashes to forward slashes and removes trailing slashes
+    fn normalize_path_for_lookup(path: &str) -> String {
+        let normalized = path.replace('\\', "/");
+        normalized.trim_end_matches('/').to_string()
+    }
+
+    /// Find password for a given path, trying multiple key formats
+    fn find_password(archive_passwords: &HashMap<String, String>, path: &str) -> Option<String> {
+        // Try exact match first
+        if let Some(pwd) = archive_passwords.get(path) {
+            return Some(pwd.clone());
+        }
+
+        // Try normalized path
+        let normalized = Self::normalize_path_for_lookup(path);
+        if let Some(pwd) = archive_passwords.get(&normalized) {
+            return Some(pwd.clone());
+        }
+
+        // Try with Path normalization
+        let path_normalized = Path::new(path).to_string_lossy().to_string();
+        if let Some(pwd) = archive_passwords.get(&path_normalized) {
+            return Some(pwd.clone());
+        }
+
+        // Try filename only (for nested archives)
+        if let Some(filename) = Path::new(path).file_name().and_then(|s| s.to_str()) {
+            if let Some(pwd) = archive_passwords.get(filename) {
+                return Some(pwd.clone());
+            }
+        }
+
+        None
+    }
+
     /// Get the effective path for deduplication
     /// For archives, this is the internal root; for directories, it's the actual path
     fn get_effective_path(&self, item: &DetectedItem) -> PathBuf {
@@ -331,10 +367,34 @@ impl Analyzer {
             // They're from the same archive if their paths (archive paths) are the same
             a.path == b.path
         } else {
-            // For directories, check if they share a common root
+            // For directories, check if one is a direct ancestor of the other
+            // Use canonical comparison to avoid issues like "A330" matching "A330_variant"
             let a_path = PathBuf::from(&a.path);
             let b_path = PathBuf::from(&b.path);
-            a_path.starts_with(&b_path) || b_path.starts_with(&a_path)
+
+            // Check if paths are exactly equal
+            if a_path == b_path {
+                return true;
+            }
+
+            // Check if one is a proper subdirectory of the other
+            // by verifying the parent-child relationship with path components
+            if a_path.starts_with(&b_path) {
+                // Verify it's a proper subdirectory (not just prefix match)
+                let relative = a_path.strip_prefix(&b_path).ok();
+                if let Some(rel) = relative {
+                    // Must have at least one component (not empty)
+                    return rel.components().count() > 0;
+                }
+            }
+            if b_path.starts_with(&a_path) {
+                let relative = b_path.strip_prefix(&a_path).ok();
+                if let Some(rel) = relative {
+                    return rel.components().count() > 0;
+                }
+            }
+
+            false
         }
     }
 
@@ -404,7 +464,7 @@ impl Analyzer {
         };
 
         // Get password for this archive if it was provided
-        let password = archive_passwords.get(&item.path).cloned();
+        let password = Self::find_password(archive_passwords, &item.path);
 
         // Debug: log password lookup
         if password.is_some() {
@@ -413,11 +473,12 @@ impl Analyzer {
                 Some("analyzer"),
             );
         } else if !archive_passwords.is_empty() {
-            logger::log_info(
+            logger::log_debug(
                 &format!("Password NOT found for item.path: '{}', available keys: {:?}",
                     item.path,
                     archive_passwords.keys().collect::<Vec<_>>()),
                 Some("analyzer"),
+                None,
             );
         }
 
