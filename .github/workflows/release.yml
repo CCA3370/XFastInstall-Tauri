@@ -1,0 +1,206 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NET_RETRY: 3
+
+jobs:
+  prepare-release:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get-version.outputs.version }}
+      tag: ${{ steps.get-version.outputs.tag }}
+      changelog: ${{ steps.extract-changelog.outputs.changelog }}
+      is_prerelease: ${{ steps.check-prerelease.outputs.is_prerelease }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Get version from tauri.conf.json
+        id: get-version
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+          echo "📦 Version: $VERSION"
+          echo "🏷️  Tag: v$VERSION"
+
+      - name: Check if pre-release
+        id: check-prerelease
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          if [ "$MAJOR" = "0" ]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "⚠️  Pre-release detected (version < 1.0.0)"
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "✅ Stable release (version >= 1.0.0)"
+          fi
+
+      - name: Sync version to package.json
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          node -e "const fs=require('fs'); const pkg=require('./package.json'); pkg.version='$VERSION'; fs.writeFileSync('package.json', JSON.stringify(pkg,null,2)+'\n');"
+          echo "✅ Synced version to package.json: $VERSION"
+
+      - name: Check if tag exists
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "❌ Tag v$VERSION already exists!"
+            echo "Please update the version in src-tauri/tauri.conf.json"
+            exit 1
+          else
+            echo "✅ Tag v$VERSION does not exist, proceeding..."
+          fi
+
+      - name: Extract changelog for this version
+        id: extract-changelog
+        run: |
+          VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          
+          # Extract the changelog section for this version
+          # This will extract everything between [VERSION] and the next [VERSION] or end of file
+          CHANGELOG=$(awk -v ver="[$VERSION]" '
+            $0 ~ ver { found=1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md | sed '/^$/d' | head -c 65000)
+          
+          if [ -z "$CHANGELOG" ]; then
+            echo "⚠️  No changelog found for version $VERSION, using default message"
+            CHANGELOG="See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details."
+          else
+            echo "✅ Extracted changelog for version $VERSION"
+          fi
+          
+          # Write to file to avoid issues with multiline in GitHub Actions
+          echo "$CHANGELOG" > /tmp/changelog.txt
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          cat /tmp/changelog.txt >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Commit version sync
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          if git diff --staged --quiet; then
+            echo "ℹ️  No changes to commit"
+          else
+            git commit -m "chore: sync version to package.json"
+            git push
+            echo "✅ Committed and pushed version sync"
+          fi
+
+  build-and-release:
+    name: Build and Release
+    needs: prepare-release
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main  # Ensure we get the latest commit with version sync
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "v2-rust-release"
+          key: "release-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}"
+          cache-all-crates: true
+
+      - name: Set production build environment
+        shell: bash
+        run: |
+          # Production build settings for maximum optimization
+          echo "CARGO_INCREMENTAL=0" >> $GITHUB_ENV
+          echo "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1" >> $GITHUB_ENV
+          echo "CARGO_PROFILE_RELEASE_LTO=fat" >> $GITHUB_ENV
+          echo "CARGO_PROFILE_RELEASE_OPT_LEVEL=3" >> $GITHUB_ENV
+          echo "CARGO_PROFILE_RELEASE_STRIP=symbols" >> $GITHUB_ENV
+          echo "CARGO_PROFILE_RELEASE_PANIC=abort" >> $GITHUB_ENV
+          echo "RUSTFLAGS=-C target-cpu=x86-64-v2" >> $GITHUB_ENV
+          echo "BUILD_MODE=production" >> $GITHUB_ENV
+          echo "✅ Production build environment configured"
+          echo "📊 Settings: LTO=fat, Opt=3, Codegen=1"
+
+      - name: Build Tauri
+        run: |
+          echo "🔨 Building XFastInstall ${{ needs.prepare-release.outputs.version }}..."
+          npm run tauri:build
+
+      - name: Rename and prepare artifacts
+        shell: bash
+        run: |
+          cd target/release
+          mv xfastinstall.exe XFastInstall-${{ needs.prepare-release.outputs.version }}-windows-portable.exe
+          
+          # Create a checksums file
+          sha256sum XFastInstall-${{ needs.prepare-release.outputs.version }}-windows-portable.exe > checksums.txt
+          
+          echo "✅ Artifacts prepared:"
+          ls -lh XFastInstall-*.exe
+          cat checksums.txt
+
+      - name: Create Git Tag
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ needs.prepare-release.outputs.tag }}" -m "Release ${{ needs.prepare-release.outputs.tag }}"
+          git push origin "${{ needs.prepare-release.outputs.tag }}"
+          echo "✅ Created and pushed tag: ${{ needs.prepare-release.outputs.tag }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.prepare-release.outputs.tag }}
+          name: ${{ needs.prepare-release.outputs.tag }}
+          body: ${{ needs.prepare-release.outputs.changelog }}
+          draft: false
+          prerelease: ${{ needs.prepare-release.outputs.is_prerelease == 'true' }}
+          files: |
+            target/release/XFastInstall-${{ needs.prepare-release.outputs.version }}-windows-portable.exe
+            target/release/checksums.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release Summary
+        shell: bash
+        run: |
+          echo "🎉 Release ${{ needs.prepare-release.outputs.tag }} created successfully!"
+          echo "📦 Version: ${{ needs.prepare-release.outputs.version }}"
+          echo "🏷️  Tag: ${{ needs.prepare-release.outputs.tag }}"
+          if [ "${{ needs.prepare-release.outputs.is_prerelease }}" = "true" ]; then
+            echo "⚠️  Type: Pre-release (version < 1.0.0)"
+          else
+            echo "✅ Type: Stable release"
+          fi
+          echo "🔗 Release URL: https://github.com/${{ github.repository }}/releases/tag/${{ needs.prepare-release.outputs.tag }}"

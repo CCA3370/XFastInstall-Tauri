@@ -1,0 +1,322 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.0] - 2026-01-16
+
+### 🎉 Initial Release
+
+XFastInstall is a modern, intelligent X-Plane addon installer that makes installing aircraft, scenery, plugins, and navigation data effortless.
+
+---
+
+### ✨ Core Features
+
+#### 🎯 Smart Addon Detection
+Automatically identifies and categorizes X-Plane addons:
+- **Aircraft** - Detects `.acf` files
+- **Scenery** - Recognizes `library.txt` or `.dsf` files with proper Earth nav data structure
+- **Plugins** - Finds `.xpl` files with platform-specific subdirectory support (win_x64, mac_x64, lin_x64, etc.)
+- **Navigation Data** - Identifies `cycle.json` files with GNS430 detection
+- **Intelligent Deduplication** - Automatically removes nested duplicates (e.g., plugin inside aircraft folder)
+
+#### 📦 Drag & Drop Installation
+- **Simple Interface** - Just drag files or folders into the window
+- **Batch Processing** - Install multiple addons at once
+- **Archive Support** - Works with `.zip`, `.7z`, and `.rar` files
+- **Folder Support** - Directly install from uncompressed folders
+- **Windows Context Menu** - Right-click any file/folder and select "Install to X-Plane" (Windows only)
+- **Command Line Support** - Launch with file paths as arguments
+
+#### 🔐 Password-Protected Archives
+- **Full Encryption Support**:
+  - ZIP: Both ZipCrypto and AES encryption
+  - 7z: Full password support
+  - RAR: Full password support
+- **Unified Password Mode** - Use one password for all archives
+- **Individual Passwords** - Set different passwords for each archive
+- **Smart Retry** - Automatically retry with correct password
+
+---
+
+### 🛠️ Installation Options
+
+#### 📋 Installation Modes
+
+**New Installation** (Target doesn't exist)
+- Direct installation to target directory
+- No conflicts or overwrites
+- Fastest installation method
+- Automatically selected when target folder doesn't exist
+
+**When Target Already Exists** - Choose how to handle existing addons:
+
+**Clean Install** (Recommended)
+- Deletes old folder and installs fresh copy
+- **Aircraft Backup Features**:
+  - Automatic livery backup and restoration
+  - Configuration file backup with customizable patterns (e.g., `*_prefs.txt`, `*.cfg`)
+  - Skips existing liveries to preserve new ones
+  - Pattern-based config file matching with glob support
+
+**Direct Overwrite**
+- Keeps existing files
+- Only overwrites matching files
+- Preserves files not in the new addon
+
+#### ⚛️ Atomic Installation Mode
+Advanced installation mode for maximum safety:
+- **Three Scenarios**:
+  - Fresh Install: Direct atomic move to target
+  - Clean Install: Backup → Move → Restore → Cleanup
+  - Overwrite Install: File-by-file atomic merge
+- **Safety Features**:
+  - Temporary staging directory on same drive
+  - Automatic rollback on failure
+  - Disk space validation (minimum 1GB required)
+  - Symbolic link preservation (Unix and Windows)
+  - Automatic cleanup of temporary files
+- **Progress Reporting**: Real-time updates for each phase (backup, move, restore, cleanup)
+
+#### 🎛️ Addon Type Filtering
+- **Selective Installation** - Choose which addon types to auto-install
+- **Type Toggles** - Enable/disable Aircraft, Scenery, Plugins, Navdata individually
+- **Quick Toggle** - Enable/disable all types at once
+- **Persistent Settings** - Preferences saved between sessions
+
+---
+
+### 🔍 Intelligence & Safety
+
+#### 🛡️ Security Features
+- **Path Traversal Protection** - Prevents malicious archives from extracting outside target directory
+- **Compression Bomb Detection**:
+  - Maximum extraction size: 20GB per archive
+  - Maximum compression ratio: 100:1
+  - Warning dialog for suspicious archives
+- **Size Validation** - Alerts for unusually large archives
+- **Safe Extraction** - All paths sanitized before extraction
+
+#### ✅ File Integrity Verification
+Post-installation verification ensures files are correctly installed:
+- **Multiple Hash Algorithms**: MD5, SHA-1, SHA-256, CRC32
+- **Configurable by Format**:
+  - ZIP archives verification
+  - 7z archives verification
+  - RAR archives verification (note: not supported due to library limitation)
+  - Directory verification
+- **Smart Retry** - Automatically retries failed files
+- **Detailed Statistics** - Shows verification progress and results
+- **Progress Tracking** - Real-time verification progress (0-100%)
+
+#### ⚠️ Conflict Detection
+- **Existing Installation Warnings** - Alerts when target folder already exists
+- **Navdata Cycle Display** - Shows existing and new cycle information
+- **Size Warnings** - Displays estimated extraction size
+- **Confirmation Required** - User must confirm before overwriting
+
+---
+
+### 📊 Progress & Monitoring
+
+#### 📈 Real-Time Progress Tracking
+Comprehensive progress information during installation:
+- **Overall Progress** - Percentage complete (0-100%)
+- **Current File** - Name of file being processed
+- **Bytes Processed** - Data transfer progress
+- **Installation Phases**:
+  - Calculating: Analyzing files and preparing tasks
+  - Installing: Copying/extracting files
+  - Verifying: Checking file integrity (with sub-progress 0-100%)
+  - Finalizing: Completing installation
+- **Task Counter** - Current task number and total tasks
+- **Atomic Installation Phases** - Detailed progress for backup, move, restore, cleanup
+
+#### 🎮 Task Control
+Full control over the installation process:
+- **Cancel All Tasks** - Stop entire installation process
+- **Skip Current Task** - Skip problematic addon and continue with next
+- **Automatic Cleanup** - Removes partially installed files when cancelled/skipped
+- **Confirmation Dialogs** - Warns about data loss before cancelling/skipping
+- **Clean Install Warning** - Special warning when original files may be lost
+
+#### 📉 Performance Metrics
+Monitor installation performance:
+- **Installation Speed** - MB/s throughput
+- **Cache Hit Rate** - Archive metadata cache efficiency
+- **Files Processed** - Total number of files installed
+- **Time Elapsed** - Installation duration
+
+---
+
+### 🎨 User Interface
+
+#### 🌍 Multi-Language Support
+- **Languages**: English and Chinese
+- **Auto-Detection** - Automatically detects system language
+- **Manual Switch** - Change language anytime via language switcher
+- **Bilingual Logs** - Log messages in selected language
+
+#### 🌓 Theme Support
+- **Light Theme** - Clean, bright interface
+- **Dark Theme** - Easy on the eyes
+- **Persistent** - Theme preference saved between sessions
+- **Smooth Transitions** - Animated theme switching
+
+#### 💬 Notifications & Dialogs
+- **Toast Notifications** - Non-intrusive status messages
+- **Confirmation Modals** - For critical operations (install, cancel, skip)
+- **Error Modals** - Detailed error information with copy button
+- **Password Modals** - Secure password input for encrypted archives
+- **Completion View** - Summary of successful and failed installations
+
+#### 📋 Task List Display
+Comprehensive task information before installation:
+- **Addon Type** - Visual icon and label
+- **Addon Name** - Display name
+- **Source Path** - Original file/folder location
+- **Target Path** - Installation destination
+- **File Size** - Estimated size after extraction
+- **Conflict Warnings** - Existing installation alerts
+- **Navdata Cycle Info** - Shows existing and new cycle numbers
+- **Enable/Disable Toggle** - Skip individual tasks
+- **Install Mode Selection** - Choose Clean Install or Direct Overwrite per task
+- **Backup Options** - Configure livery and config file backup (for aircraft)
+
+---
+
+### 📝 Logging & Debugging
+
+#### 📄 Comprehensive Logging System
+- **Thread-Safe Logging** - Concurrent logging from multiple threads
+- **Automatic Rotation** - Logs rotate at 3MB, trim to 2MB
+- **Bilingual Messages** - Logs in English or Chinese based on setting
+- **Log Levels**:
+  - Basic: Errors and warnings only
+  - Full: Includes info messages
+  - Debug: Verbose debugging information
+- **Log Location**: `%LOCALAPPDATA%/XFastInstall/logs/xfastinstall.log` (Windows)
+- **Frontend Integration** - Frontend logs sent to backend
+
+#### 🔧 Log Management
+- **View Recent Logs** - Display last 50 log entries in UI
+- **Refresh Logs** - Update log display
+- **Copy Logs** - Copy all logs to clipboard
+- **Open Log Folder** - Open log directory in file explorer
+- **Export All Logs** - Get complete log file content
+- **Log Path Display** - Shows current log file location
+
+---
+
+### ⚡ Performance Optimizations
+
+#### 🚀 Speed Enhancements
+- **Archive Metadata Caching**:
+  - Thread-safe DashMap cache
+  - 5-minute TTL (Time To Live)
+  - Caches uncompressed sizes
+  - Automatic cleanup of expired entries
+  - Tracks cache hit/miss rates
+- **Parallel Processing**:
+  - Multi-threaded ZIP extraction (each thread has own ZipArchive instance)
+  - Parallel file copying using rayon (for 7z/RAR and directories)
+  - Parallel path scanning during analysis
+  - Concurrent addon detection
+- **Optimized File I/O**:
+  - 4MB buffer size for maximum throughput
+  - Memory-efficient streaming
+- **Async Command Execution**:
+  - All Tauri commands run in background thread pool via tokio
+  - Non-blocking UI during long operations
+  - Uses `tokio::task::spawn_blocking` for CPU-intensive tasks
+- **Smart Scanning**:
+  - Maximum directory depth: 15 levels
+  - Prevents excessive recursion
+  - Early termination for invalid paths
+
+---
+
+### 🖥️ Platform Support
+
+#### 🌐 Cross-Platform
+- **Windows** - Full support with context menu integration
+- **macOS** - Full support with native file dialogs
+- **Linux** - Full support with GTK integration
+
+#### 🔧 Platform-Specific Features
+
+**Windows**
+- Context menu registration (uses HKEY_CURRENT_USER, no admin required)
+- GetDiskFreeSpaceExW API for accurate disk space check
+- Windows-specific symlink handling (file vs directory)
+
+**Unix/Linux/macOS**
+- statvfs-based disk space check
+- Unix file permission preservation
+- Unix symlink handling
+- Native file dialogs
+
+---
+
+### 🏗️ Technical Architecture
+
+#### 📐 Three-Layer Architecture
+1. **Rust Backend** - File system operations, addon detection, installation
+2. **Tauri Bridge** - Command-based RPC between Rust and JavaScript
+3. **Vue 3 Frontend** - UI layer with Pinia state management
+
+#### 🛠️ Technology Stack
+- **Backend**: Rust with Tauri 2 framework
+- **Frontend**: Vue 3 with Composition API
+- **State Management**: Pinia stores
+- **Internationalization**: vue-i18n
+- **Styling**: Tailwind CSS v4
+- **Build System**: Vite (frontend), Cargo (backend)
+
+#### 📦 Key Dependencies
+- **Archive Handling**: zip, sevenz-rust2, unrar
+- **Parallel Processing**: rayon, tokio
+- **Caching**: DashMap
+- **Logging**: Custom logger with rotation
+- **File Operations**: walkdir, tempfile
+- **Hashing**: crc32fast, sha2
+
+---
+
+### 🔒 Security
+
+- **Path Traversal Protection** - Sanitizes all file paths during extraction
+- **Compression Bomb Detection** - Validates extraction size (20GB max) and compression ratio (100:1 max)
+- **Safe Archive Extraction** - Prevents extraction outside target directory
+- **Input Validation** - All user inputs validated before processing
+- **Error Handling** - Comprehensive error handling with user-friendly messages
+
+---
+
+### 📚 Documentation
+
+- **In-App Help** - Tooltips and descriptions throughout the UI
+- **Pattern Help** - Glob pattern examples for config file backup
+- **Mode Descriptions** - Clear explanations of Clean Install vs Direct Overwrite
+- **Atomic Install Explanation** - Detailed benefits and notes
+- **Error Messages** - Clear, actionable error descriptions
+
+---
+
+### 🎯 User Experience
+
+- **Intuitive Interface** - Clean, modern design
+- **Minimal Configuration** - Works out of the box with sensible defaults
+- **Smart Defaults** - Recommended settings pre-selected
+- **Visual Feedback** - Animated text, progress bars, status indicators
+- **Responsive Design** - Adapts to different window sizes
+- **Keyboard Shortcuts** - Quick access to common actions
+- **Persistent Settings** - All preferences saved automatically
+
+[unreleased]: https://github.com/CCA3370/XFastInstall-Tauri/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/CCA3370/XFastInstall-Tauri/releases/tag/v0.1.0
