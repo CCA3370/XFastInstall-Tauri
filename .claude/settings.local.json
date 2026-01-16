@@ -41,7 +41,8 @@
       "Bash(find:*)",
       "Bash(git checkout:*)",
       "Bash(node -e:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(git fetch:*)"
     ]
   }
 }
