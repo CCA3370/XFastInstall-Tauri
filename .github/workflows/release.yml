@@ -2,6 +2,11 @@ name: Release
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
 
 env:
   CARGO_TERM_COLOR: always
@@ -11,6 +16,7 @@ jobs:
   prepare-release:
     name: Prepare Release
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true) }}
     outputs:
       version: ${{ steps.get-version.outputs.version }}
       tag: ${{ steps.get-version.outputs.tag }}
@@ -75,15 +81,22 @@ jobs:
           
           # Extract the changelog section for this version
           # This will extract everything between [VERSION] and the next [VERSION] or end of file
-          CHANGELOG=$(awk -v ver="[$VERSION]" '
+          CHANGELOG=$(awk -v ver="## [$VERSION]" '
             $0 ~ ver { found=1; next }
             found && /^## \[/ { exit }
             found { print }
-          ' CHANGELOG.md | sed '/^$/d' | head -c 65000)
+          ' CHANGELOG.md | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' | head -c 65000)
           
-          if [ -z "$CHANGELOG" ]; then
-            echo "⚠️  No changelog found for version $VERSION, using default message"
-            CHANGELOG="See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details."
+          if [ -z "$CHANGELOG" ] || [ "$(echo "$CHANGELOG" | tr -d '[:space:]')" = "" ]; then
+            echo "⚠️  No changelog found for version $VERSION"
+            echo "Please add a changelog entry for version $VERSION in CHANGELOG.md"
+            echo ""
+            echo "Expected format:"
+            echo "## [$VERSION] - YYYY-MM-DD"
+            echo ""
+            echo "### Added"
+            echo "- Feature descriptions here"
+            exit 1
           else
             echo "✅ Extracted changelog for version $VERSION"
           fi
@@ -113,6 +126,7 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true) }}
     
     steps:
       - name: Checkout
