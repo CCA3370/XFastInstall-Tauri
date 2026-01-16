@@ -2,11 +2,9 @@ name: Release
 
 on:
   workflow_dispatch:
-  pull_request:
+  push:
     branches:
       - main
-    types:
-      - closed
 
 env:
   CARGO_TERM_COLOR: always
@@ -16,7 +14,7 @@ jobs:
   prepare-release:
     name: Prepare Release
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true) }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
     outputs:
       version: ${{ steps.get-version.outputs.version }}
       tag: ${{ steps.get-version.outputs.tag }}
@@ -81,8 +79,8 @@ jobs:
           
           # Extract the changelog section for this version
           # This will extract everything between [VERSION] and the next [VERSION] or end of file
-          CHANGELOG=$(awk -v ver="## [$VERSION]" '
-            $0 ~ ver { found=1; next }
+          CHANGELOG=$(awk -v ver="## \[$VERSION\]" '
+            $0 ~ ver { found=1; print; next }  # include the header line itself
             found && /^## \[/ { exit }
             found { print }
           ' CHANGELOG.md | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' | head -c 65000)
@@ -126,7 +124,7 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
-    if: ${{ github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.merged == true) }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
     
     steps:
       - name: Checkout
