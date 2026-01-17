@@ -271,9 +271,9 @@ TypeScript types (src/types/index.ts) mirror Rust types (src-tauri/src/models.rs
 ### Examples
 
 **Good entries:**
-- `Added automatic update check with 24-hour cache`
+- `Added automatic update check`
 - `Fixed memory leak in event listener cleanup`
-- `Changed context menu registration to use HKEY_CURRENT_USER for non-admin access`
+- `Improved context menu registration`
 - `Removed outdated documentation files`
 
 **Bad entries (too technical):**
@@ -296,6 +296,47 @@ Do NOT update for:
 - Internal code cleanup
 - Comment or documentation updates in code
 - Minor code style changes
+
+### Unreleased Section Rules
+
+**CRITICAL**: When working on a new feature that has been added to the `[Unreleased]` section:
+
+1. **Do NOT add separate entries for bug fixes, changes, or improvements to that unreleased feature**
+   - If you add a feature to `[Unreleased]` and then fix bugs in it, DO NOT list those fixes separately
+   - The feature is still unreleased - all work on it is part of the initial development
+   - Users will see the feature as a complete unit when it's released
+
+2. **Only update the feature description if the changes are significant**
+   - Minor bug fixes: Don't mention
+   - Significant behavior changes: Update the feature description
+   - New sub-features: Add as bullet points under the main feature
+
+3. **Example of WRONG approach:**
+   ```markdown
+   ## [Unreleased]
+   ### Added
+   - Automatic update check feature
+
+   ### Fixed
+   - Fixed update check button not responding  ❌ WRONG
+   - Fixed update banner styling issues        ❌ WRONG
+   ```
+
+4. **Example of CORRECT approach:**
+   ```markdown
+   ## [Unreleased]
+   ### Added
+   - Automatic update check feature
+     - Auto-check on startup
+     - Manual check button
+     - Update notification banner
+   ```
+
+5. **When to create separate entries:**
+   - Only when fixing bugs in **already released features** (features in previous version sections)
+   - Only when modifying **already released features** (features in previous version sections)
+
+**Rationale**: Users don't care about the development process of unreleased features. They only care about the final, working feature when it's released. Listing development bugs creates confusion and makes the changelog cluttered.
 
 ## Key Dependencies
 
