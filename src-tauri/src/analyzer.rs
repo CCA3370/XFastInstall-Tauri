@@ -230,8 +230,46 @@ impl Analyzer {
             result.extend(deduped);
         }
 
+        // Handle Scenery vs SceneryLibrary conflict: if same path has both, keep Scenery
+        result = self.resolve_scenery_conflicts(result);
+
         // Apply priority filtering: remove plugins inside aircraft/scenery
         result = self.filter_by_priority(result);
+
+        result
+    }
+
+    /// Resolve conflicts between Scenery and SceneryLibrary
+    /// If the same directory has both types, keep Scenery (higher priority)
+    fn resolve_scenery_conflicts(&self, items: Vec<DetectedItem>) -> Vec<DetectedItem> {
+        use std::collections::HashMap;
+
+        // Group items by their effective path
+        let mut by_path: HashMap<PathBuf, Vec<DetectedItem>> = HashMap::new();
+        for item in items {
+            let path = self.get_effective_path(&item);
+            by_path.entry(path).or_default().push(item);
+        }
+
+        let mut result = Vec::new();
+
+        for (_path, path_items) in by_path {
+            // Check if this path has both Scenery and SceneryLibrary
+            let has_scenery = path_items.iter().any(|i| i.addon_type == AddonType::Scenery);
+            let has_scenery_library = path_items.iter().any(|i| i.addon_type == AddonType::SceneryLibrary);
+
+            if has_scenery && has_scenery_library {
+                // Keep only Scenery, filter out SceneryLibrary
+                for item in path_items {
+                    if item.addon_type != AddonType::SceneryLibrary {
+                        result.push(item);
+                    }
+                }
+            } else {
+                // No conflict, keep all items
+                result.extend(path_items);
+            }
+        }
 
         result
     }
@@ -1044,6 +1082,40 @@ mod tests {
         let result = analyzer.deduplicate(items);
 
         // Both should be kept
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_scenery_vs_scenery_library_same_path() {
+        let analyzer = Analyzer::new();
+
+        // Same directory has both library.txt and .dsf files
+        let items = vec![
+            create_detected_item(AddonType::Scenery, "/test/KSEA", "KSEA Scenery", None),
+            create_detected_item(AddonType::SceneryLibrary, "/test/KSEA", "KSEA Library", None),
+        ];
+
+        let result = analyzer.deduplicate(items);
+
+        // Should only keep Scenery, not SceneryLibrary
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].addon_type, AddonType::Scenery);
+        assert_eq!(result[0].display_name, "KSEA Scenery");
+    }
+
+    #[test]
+    fn test_scenery_and_scenery_library_different_paths() {
+        let analyzer = Analyzer::new();
+
+        // Different directories - both should be kept
+        let items = vec![
+            create_detected_item(AddonType::Scenery, "/test/KSEA", "KSEA Scenery", None),
+            create_detected_item(AddonType::SceneryLibrary, "/test/Library", "Custom Library", None),
+        ];
+
+        let result = analyzer.deduplicate(items);
+
+        // Both should be kept since they're different paths
         assert_eq!(result.len(), 2);
     }
 
