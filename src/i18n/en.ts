@@ -131,7 +131,25 @@ export default {
     windowsIntegrationBenefit2: 'Supports selecting multiple files or folders for batch installation',
     windowsIntegrationBenefit3: 'Quick installation directly from File Explorer without opening the app',
     windowsIntegrationBenefit4: 'Registration saved in current user configuration, no admin rights required',
-    windowsIntegrationNote: 'Note: Only available on Windows systems'
+    windowsIntegrationNote: 'Note: Only available on Windows systems',
+    // Scenery Auto-Sorting
+    sceneryAutoSort: 'Scenery Auto-Sorting',
+    sceneryAutoSortDesc: 'Automatically sort scenery_packs.ini after scenery installation',
+    sceneryAutoSortExplain: 'Feature Explanation',
+    sceneryAutoSortBenefit1: 'Automatically classifies scenery by type (Airport, Overlay, Mesh, Library, etc.)',
+    sceneryAutoSortBenefit2: 'Sorts scenery_packs.ini in correct loading order for best rendering results',
+    sceneryAutoSortBenefit3: 'Creates backup before modification, safe and reversible',
+    sceneryAutoSortNeedPath: 'Please set X-Plane path first to use this feature',
+    sortNow: 'Sort All Scenery Now',
+    sorting: 'Sorting...',
+    scenerySorted: 'Scenery packs sorted successfully',
+    scenerySortFailed: 'Failed to sort scenery packs',
+    rebuildIndex: 'Rebuild',
+    rebuilding: 'Rebuilding...',
+    rebuildIndexTooltip: 'Rebuild scenery index (re-scan all scenery packages)',
+    indexRebuilt: 'Scenery index rebuilt successfully',
+    indexRebuildFailed: 'Failed to rebuild scenery index',
+    experimental: 'Experimental'
   },
   modal: {
     confirmInstallation: 'Confirm Installation',

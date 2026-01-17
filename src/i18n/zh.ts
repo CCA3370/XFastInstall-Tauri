@@ -144,7 +144,25 @@ export default {
     windowsIntegrationBenefit2: '支持同时选择多个文件或文件夹进行批量安装',
     windowsIntegrationBenefit3: '无需打开应用程序，直接从资源管理器快速安装',
     windowsIntegrationBenefit4: '注册信息保存在当前用户配置中，不需要管理员权限',
-    windowsIntegrationNote: '注意：仅在 Windows 系统上可用'
+    windowsIntegrationNote: '注意：仅在 Windows 系统上可用',
+    // 地景自动排序
+    sceneryAutoSort: '地景自动排序',
+    sceneryAutoSortDesc: '安装地景后自动排序 scenery_packs.ini',
+    sceneryAutoSortExplain: '功能说明',
+    sceneryAutoSortBenefit1: '自动识别地景类型（机场、叠加层、网格、库等）',
+    sceneryAutoSortBenefit2: '按正确的加载顺序排序 scenery_packs.ini，获得最佳渲染效果',
+    sceneryAutoSortBenefit3: '修改前自动备份，安全可逆',
+    sceneryAutoSortNeedPath: '请先设置 X-Plane 路径才能使用此功能',
+    sortNow: '立即排序所有地景',
+    sorting: '排序中...',
+    scenerySorted: '地景排序完成',
+    scenerySortFailed: '地景排序失败',
+    rebuildIndex: '重建索引',
+    rebuilding: '重建中...',
+    rebuildIndexTooltip: '重建地景索引（重新扫描所有地景包）',
+    indexRebuilt: '地景索引重建完成',
+    indexRebuildFailed: '地景索引重建失败',
+    experimental: '实验性'
   },
   modal: {
     confirmInstallation: '确认安装',

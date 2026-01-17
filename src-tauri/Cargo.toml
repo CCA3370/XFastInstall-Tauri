@@ -38,7 +38,8 @@ opener = "0.8"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
-winapi = { version = "0.3", features = ["fileapi", "minwindef"] }
+winapi = { version = "0.3", features = ["fileapi", "minwindef", "combaseapi", "objbase", "objidl", "shlobj", "shobjidl_core", "shtypes", "wtypesbase", "unknwnbase", "wtypes", "ole2", "winerror"] }
+lnk = "0.5"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

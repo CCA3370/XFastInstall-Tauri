@@ -8,11 +8,11 @@ use std::sync::Mutex;
 const MAX_LOG_SIZE: u64 = 3 * 1024 * 1024; // 3MB
 const TRIM_TARGET_SIZE: u64 = 2 * 1024 * 1024; // Trim to 2MB when exceeds max
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LogLevel {
-    Info,
-    Debug,
-    Error,
+    Debug = 0,
+    Info = 1,
+    Error = 2,
 }
 
 impl LogLevel {
@@ -86,6 +86,7 @@ struct LoggerInner {
     log_path: PathBuf,
     locale: Locale,
     is_first_log: bool,
+    min_level: LogLevel,
 }
 
 impl LoggerInner {
@@ -104,6 +105,7 @@ impl LoggerInner {
             log_path: log_dir.join("xfastinstall.log"),
             locale: Locale::default(),
             is_first_log: true,
+            min_level: LogLevel::Info, // Default to Info level
         }
     }
 
@@ -115,7 +117,20 @@ impl LoggerInner {
         self.locale
     }
 
+    fn set_min_level(&mut self, level: LogLevel) {
+        self.min_level = level;
+    }
+
+    fn get_min_level(&self) -> LogLevel {
+        self.min_level
+    }
+
     fn write_log(&mut self, level: LogLevel, message: &str, context: Option<&str>, location: Option<&str>) {
+        // Filter by log level
+        if level < self.min_level {
+            return;
+        }
+
         // Rotate if needed before writing
         self.rotate_if_needed();
 
@@ -284,6 +299,20 @@ pub fn log_debug(message: &str, context: Option<&str>, location: Option<&str>) {
 pub fn log_error(message: &str, context: Option<&str>) {
     if let Ok(mut logger) = LOGGER.lock() {
         logger.write_log(LogLevel::Error, message, context, None);
+    }
+}
+
+pub fn set_log_level(level: LogLevel) {
+    if let Ok(mut logger) = LOGGER.lock() {
+        logger.set_min_level(level);
+    }
+}
+
+pub fn is_debug_enabled() -> bool {
+    if let Ok(logger) = LOGGER.lock() {
+        logger.get_min_level() <= LogLevel::Debug
+    } else {
+        false
     }
 }
 

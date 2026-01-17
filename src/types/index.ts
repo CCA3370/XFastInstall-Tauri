@@ -123,3 +123,37 @@ export interface UpdateInfo {
   releaseUrl: string;
   publishedAt: string;
 }
+
+// ========== Scenery Auto-Sorting Types ==========
+
+export enum SceneryCategory {
+  FixedHighPriority = 'FixedHighPriority',
+  Airport = 'Airport',
+  DefaultAirport = 'DefaultAirport',
+  Library = 'Library',
+  Overlay = 'Overlay',
+  Orthophotos = 'Orthophotos',
+  Mesh = 'Mesh',
+  Other = 'Other',
+}
+
+export interface SceneryPackageInfo {
+  folderName: string;
+  category: SceneryCategory;
+  lastModified: number;
+  hasAptDat: boolean;
+  hasDsf: boolean;
+  hasLibraryTxt: boolean;
+  hasTextures: boolean;
+  hasObjects: boolean;
+  textureCount: number;
+  indexedAt: number;
+  requiredLibraries: string[];
+  missingLibraries: string[];
+}
+
+export interface SceneryIndexStats {
+  totalPackages: number;
+  byCategory: Record<string, number>;
+  lastUpdated: number;
+}

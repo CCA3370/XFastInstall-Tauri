@@ -25,7 +25,7 @@ jobs:
     
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: main
           fetch-depth: 0
@@ -109,8 +109,8 @@ jobs:
 
       - name: Commit version sync
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
           git add package.json
           if git diff --staged --quiet; then
             echo "ℹ️  No changes to commit"
@@ -130,7 +130,7 @@ jobs:
     
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: main  # Ensure we get the latest commit with version sync
 
@@ -198,17 +198,17 @@ jobs:
       - name: Create Git Tag
         shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
           git tag -a "${{ needs.prepare-release.outputs.tag }}" -m "Release ${{ needs.prepare-release.outputs.tag }}"
           git push origin "${{ needs.prepare-release.outputs.tag }}"
           echo "✅ Created and pushed tag: ${{ needs.prepare-release.outputs.tag }}"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.prepare-release.outputs.tag }}
-          name: ${{ needs.prepare-release.outputs.tag }}
+          name: XFastInstall ${{ needs.prepare-release.outputs.tag }}
           body: ${{ needs.prepare-release.outputs.changelog }}
           draft: false
           prerelease: ${{ needs.prepare-release.outputs.is_prerelease == 'true' }}
