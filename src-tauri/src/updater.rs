@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use chrono::Utc;
 
 /// Update information returned to the frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -215,7 +214,7 @@ impl UpdateChecker {
                                 name: "Current Version".to_string(),
                                 body: None,
                                 prerelease: false,
-                                published_at: chrono::Utc::now().to_rfc3339(),
+                                published_at: "1970-01-01T00:00:00Z".to_string(), // Placeholder date
                                 html_url: format!(
                                     "https://github.com/{}/{}/releases",
                                     self.repo_owner, self.repo_name
