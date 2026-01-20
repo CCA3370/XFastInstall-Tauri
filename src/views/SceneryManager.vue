@@ -17,9 +17,22 @@ const modalStore = useModalStore()
 
 const drag = ref(false)
 const isSortingScenery = ref(false)
+const searchQuery = ref('')
+const highlightedIndex = ref(-1)
+const currentMatchIndex = ref(0)
 
 // Local copy of entries for drag-and-drop
 const localEntries = ref<typeof sceneryStore.sortedEntries>([])
+
+// Matched indices in the original list
+const matchedIndices = computed(() => {
+  if (!searchQuery.value.trim()) return []
+  const query = searchQuery.value.toLowerCase()
+  return localEntries.value
+    .map((entry, index) => ({ entry, index }))
+    .filter(({ entry }) => entry.folderName.toLowerCase().includes(query))
+    .map(({ index }) => index)
+})
 
 // Sync local entries with store
 function syncLocalEntries() {
@@ -96,19 +109,100 @@ async function handleSortSceneryNow() {
     isSortingScenery.value = false
   }
 }
+
+// Search navigation functions
+function scrollToMatch(index: number) {
+  setTimeout(() => {
+    const element = document.querySelector(`[data-scenery-index="${index}"]`)
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      highlightedIndex.value = index
+    }
+  }, 100)
+}
+
+function handleSearchInput() {
+  if (matchedIndices.value.length > 0) {
+    currentMatchIndex.value = 0
+    scrollToMatch(matchedIndices.value[0])
+  } else {
+    highlightedIndex.value = -1
+  }
+}
+
+function goToNextMatch() {
+  if (matchedIndices.value.length === 0) return
+  currentMatchIndex.value = (currentMatchIndex.value + 1) % matchedIndices.value.length
+  scrollToMatch(matchedIndices.value[currentMatchIndex.value])
+}
+
+function goToPrevMatch() {
+  if (matchedIndices.value.length === 0) return
+  currentMatchIndex.value = (currentMatchIndex.value - 1 + matchedIndices.value.length) % matchedIndices.value.length
+  scrollToMatch(matchedIndices.value[currentMatchIndex.value])
+}
+
+function clearSearch() {
+  searchQuery.value = ''
+  highlightedIndex.value = -1
+  currentMatchIndex.value = 0
+}
 </script>
 
 <template>
   <div class="scenery-manager-view h-full flex flex-col p-4 overflow-hidden">
-    <!-- Header -->
-    <div class="mb-3 flex-shrink-0 flex items-center justify-between">
-      <div>
-        <h2 class="text-xl font-bold text-gray-900 dark:text-white">
-          {{ t('sceneryManager.title') }}
-        </h2>
-        <p class="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-          {{ t('sceneryManager.subtitle') }}
-        </p>
+    <!-- Header with search and action buttons -->
+    <div class="mb-3 flex-shrink-0 flex items-center gap-3">
+      <!-- Search box -->
+      <div class="flex-1 relative">
+        <input
+          v-model="searchQuery"
+          @input="handleSearchInput"
+          type="text"
+          :placeholder="t('sceneryManager.searchPlaceholder')"
+          class="w-full px-3 py-1.5 pl-9 pr-20 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        </svg>
+
+        <!-- Search navigation buttons -->
+        <div v-if="searchQuery && matchedIndices.length > 0" class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+          <span class="text-xs text-gray-500 dark:text-gray-400 mr-1">
+            {{ currentMatchIndex + 1 }}/{{ matchedIndices.length }}
+          </span>
+          <button
+            @click="goToPrevMatch"
+            class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+            title="Previous match"
+          >
+            <svg class="w-3 h-3 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" />
+            </svg>
+          </button>
+          <button
+            @click="goToNextMatch"
+            class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+            title="Next match"
+          >
+            <svg class="w-3 h-3 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Clear button -->
+        <button
+          v-if="searchQuery"
+          @click="clearSearch"
+          class="absolute right-2 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+          :class="{ 'right-20': matchedIndices.length > 0 }"
+          title="Clear search"
+        >
+          <svg class="w-3 h-3 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
       </div>
 
       <!-- Action buttons -->
@@ -197,19 +291,41 @@ async function handleSortSceneryNow() {
         v-model="localEntries"
         item-key="folderName"
         handle=".drag-handle"
+        :animation="200"
+        :force-fallback="true"
+        ghost-class="opacity-50"
         @start="drag = true"
         @end="handleDragEnd"
-        class="space-y-1.5"
+        class="space-y-1.5 px-1"
       >
         <template #item="{ element, index }">
-          <SceneryEntryCard
-            :entry="element"
-            :index="index"
-            :total-count="sceneryStore.totalCount"
-            @toggle-enabled="handleToggleEnabled"
-            @move-up="handleMoveUp"
-            @move-down="handleMoveDown"
-          />
+          <div
+            :data-scenery-index="index"
+            class="relative"
+            style="scroll-margin-top: 100px"
+          >
+            <!-- Highlight ring overlay -->
+            <div
+              v-if="highlightedIndex === index"
+              class="absolute inset-0 ring-4 ring-blue-500 rounded-lg pointer-events-none"
+            ></div>
+
+            <!-- Content with opacity effect for non-matches -->
+            <div
+              :class="{
+                'opacity-30 transition-opacity': searchQuery && !element.folderName.toLowerCase().includes(searchQuery.toLowerCase())
+              }"
+            >
+              <SceneryEntryCard
+                :entry="element"
+                :index="index"
+                :total-count="sceneryStore.totalCount"
+                @toggle-enabled="handleToggleEnabled"
+                @move-up="handleMoveUp"
+                @move-down="handleMoveDown"
+              />
+            </div>
+          </div>
         </template>
       </draggable>
     </div>

@@ -303,6 +303,7 @@ export default {
     subtitle: 'Manage scenery loading order and enabled state',
     navTitle: 'Scenery',
     openManager: 'Open Scenery Manager',
+    searchPlaceholder: 'Search scenery packages...',
     total: 'Total',
     enabled: 'Enabled',
     missingDeps: 'Missing Dependencies',

@@ -316,6 +316,7 @@ export default {
     subtitle: '管理地景加载顺序和启用状态',
     navTitle: '地景',
     openManager: '打开地景管理器',
+    searchPlaceholder: '搜索地景包...',
     total: '总数',
     enabled: '已启用',
     missingDeps: '缺少依赖',
