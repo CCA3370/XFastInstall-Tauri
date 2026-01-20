@@ -156,6 +156,25 @@ fn resolve_shortcut(_lnk_path: &Path) -> Option<PathBuf> {
 
 const INDEX_VERSION: u32 = 1;
 
+fn is_sam_folder_name(folder_name: &str) -> bool {
+    let folder_lower = folder_name.to_lowercase();
+
+    let parts: Vec<&str> = folder_lower
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    let has_sam_word = parts.iter().any(|&part| part == "sam");
+    let has_sam_suffix = parts.iter().any(|&part| {
+        part.ends_with("sam") && part.len() > 3 && {
+            let prefix = &part[..part.len() - 3];
+            matches!(prefix, "open" | "my" | "custom" | "new")
+        }
+    });
+
+    has_sam_word || has_sam_suffix
+}
+
 /// Manager for scenery index operations
 pub struct SceneryIndexManager {
     xplane_path: PathBuf,
@@ -722,9 +741,46 @@ impl SceneryIndexManager {
             .map(|(name, info)| (name.clone(), info.sort_order))
             .collect();
 
-        // Collect packages and sort by category priority, then by folder name
-        let mut packages: Vec<(&String, &SceneryPackageInfo)> = index.packages.iter().collect();
-        packages.sort_by(|(name_a, info_a), (name_b, info_b)| {
+        // Promote SAM libraries to FixedHighPriority before sorting
+        let mut category_changed = false;
+        for (name, info) in index.packages.iter_mut() {
+            if is_sam_folder_name(name) && info.has_library_txt && !info.has_dsf && !info.has_apt_dat {
+                if info.category != SceneryCategory::FixedHighPriority {
+                    info.category = SceneryCategory::FixedHighPriority;
+                    info.sub_priority = 0;
+                    category_changed = true;
+                }
+            }
+        }
+
+        // Preserve FixedHighPriority order, but keep SAM entries at the top
+        let mut fixed_packages: Vec<(&String, &SceneryPackageInfo)> = index
+            .packages
+            .iter()
+            .filter(|(_, info)| info.category == SceneryCategory::FixedHighPriority)
+            .collect();
+
+        fixed_packages.sort_by(|(name_a, info_a), (name_b, info_b)| {
+            let sam_a = is_sam_folder_name(name_a);
+            let sam_b = is_sam_folder_name(name_b);
+            match sam_b.cmp(&sam_a) {
+                std::cmp::Ordering::Equal => {}
+                other => return other,
+            }
+
+            match info_a.sort_order.cmp(&info_b.sort_order) {
+                std::cmp::Ordering::Equal => name_a.to_lowercase().cmp(&name_b.to_lowercase()),
+                other => other,
+            }
+        });
+
+        let mut other_packages: Vec<(&String, &SceneryPackageInfo)> = index
+            .packages
+            .iter()
+            .filter(|(_, info)| info.category != SceneryCategory::FixedHighPriority)
+            .collect();
+
+        other_packages.sort_by(|(name_a, info_a), (name_b, info_b)| {
             let priority_a = (info_a.category.priority(), info_a.sub_priority);
             let priority_b = (info_b.category.priority(), info_b.sub_priority);
 
@@ -738,8 +794,12 @@ impl SceneryIndexManager {
         });
 
         // Update sort_order based on sorted position and check for changes
-        let sorted_names: Vec<String> = packages.iter().map(|(name, _)| (*name).clone()).collect();
-        let mut has_changes = false;
+        let sorted_names: Vec<String> = fixed_packages
+            .iter()
+            .map(|(name, _)| (*name).clone())
+            .chain(other_packages.iter().map(|(name, _)| (*name).clone()))
+            .collect();
+        let mut has_changes = category_changed;
 
         for (new_order, folder_name) in sorted_names.iter().enumerate() {
             if let Some(info) = index.packages.get_mut(folder_name) {

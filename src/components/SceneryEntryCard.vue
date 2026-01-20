@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, withDefaults } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
 import { useAppStore } from '@/stores/app'
@@ -7,12 +7,14 @@ import { useToastStore } from '@/stores/toast'
 import type { SceneryManagerEntry } from '@/types'
 import { SceneryCategory } from '@/types'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   entry: SceneryManagerEntry
   index: number
   totalCount: number
   disableReorder?: boolean
-}>()
+}>(), {
+  disableReorder: false
+})
 
 const emit = defineEmits<{
   (e: 'toggle-enabled', folderName: string): void

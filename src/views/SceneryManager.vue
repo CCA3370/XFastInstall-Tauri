@@ -20,22 +20,14 @@ const modalStore = useModalStore()
 const isChineseLocale = computed(() => locale.value === 'zh')
 
 const drag = ref(false)
-const dragStartX = ref(0)
-const dragStartY = ref(0)
-const draggedItemHeight = ref(0)
 const isSortingScenery = ref(false)
 const searchQuery = ref('')
 const highlightedIndex = ref(-1)
 const currentMatchIndex = ref(0)
 const showOnlyMissingLibs = ref(false)
 const showMoreMenu = ref(false)
-const draggableRef = ref<InstanceType<typeof draggable> | null>(null)
-const listContainerRef = ref<HTMLElement | null>(null)
+const suppressLoading = ref(false)
 const moreMenuRef = ref<HTMLElement | null>(null)
-let dragGhostEl: HTMLElement | null = null
-let dragBounds: DOMRect | null = null
-
-type DragPointerEvent = MouseEvent | TouchEvent | PointerEvent | Event | undefined
 
 // Local copy of grouped entries for drag-and-drop
 const localGroupedEntries = ref<Record<string, SceneryManagerEntry[]>>({
@@ -51,6 +43,16 @@ const localGroupedEntries = ref<Record<string, SceneryManagerEntry[]>>({
 
 // Category order for display
 const categoryOrder = ['FixedHighPriority', 'Airport', 'DefaultAirport', 'Library', 'Other', 'Overlay', 'Orthophotos', 'Mesh']
+
+const groupCounts = computed(() => {
+  const counts: Record<string, { enabled: number; disabled: number }> = {}
+  for (const category of categoryOrder) {
+    const entries = localGroupedEntries.value[category] || []
+    const enabled = entries.filter(entry => entry.enabled).length
+    counts[category] = { enabled, disabled: entries.length - enabled }
+  }
+  return counts
+})
 
 // Filtered entries based on missing libraries filter
 const filteredEntries = computed(() => {
@@ -94,59 +96,7 @@ function getCategoryTranslationKey(category: string): string {
   return `sceneryManager.category${category}`
 }
 
-function getClientPoint(evt: DragPointerEvent) {
-  if (evt && 'touches' in evt && evt.touches && evt.touches.length > 0) {
-    const touch = evt.touches[0]
-    return { x: touch.clientX, y: touch.clientY }
-  }
-
-  if (evt && 'changedTouches' in evt && evt.changedTouches && evt.changedTouches.length > 0) {
-    const touch = evt.changedTouches[0]
-    return { x: touch.clientX, y: touch.clientY }
-  }
-
-  if (evt && 'clientX' in evt && 'clientY' in evt) {
-    const mouseEvent = evt as MouseEvent
-    return { x: mouseEvent.clientX, y: mouseEvent.clientY }
-  }
-
-  return { x: dragStartX.value, y: dragStartY.value }
-}
-
-// Keep drag interactions constrained to the vertical axis by canceling horizontal offset
-function updateVerticalDrag(evt?: DragPointerEvent) {
-  const { x, y } = getClientPoint(evt)
-  const sortable = (draggableRef.value as any)?._sortable
-  const offsetX = dragStartX.value - x
-
-  const containerRect = listContainerRef.value?.getBoundingClientRect() || dragBounds || null
-  const halfHeight = draggedItemHeight.value > 0 ? draggedItemHeight.value / 2 : 0
-  const minY = containerRect ? containerRect.top + halfHeight : -Infinity
-  const maxY = containerRect ? containerRect.bottom - halfHeight : Infinity
-  const clampedY = Math.min(Math.max(y, minY), maxY)
-
-  if (sortable) {
-    sortable.option('fallbackOffset', { x: offsetX, y: dragStartY.value - clampedY })
-  }
-
-  if (dragGhostEl) {
-    const deltaY = clampedY - dragStartY.value
-    dragGhostEl.style.transform = `translate3d(0px, ${deltaY}px, 0px)`
-  }
-}
-
-function cleanupDragLock() {
-  window.removeEventListener('pointermove', updateVerticalDrag as EventListener)
-  window.removeEventListener('touchmove', updateVerticalDrag as EventListener)
-  dragBounds = null
-  draggedItemHeight.value = 0
-  if (dragGhostEl) {
-    dragGhostEl.style.transform = ''
-    dragGhostEl = null
-  }
-}
-
-function handleDragStart(evt: any) {
+function handleDragStart() {
   drag.value = true
 }
 
@@ -159,7 +109,6 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  cleanupDragLock()
   document.removeEventListener('click', handleClickOutside)
 })
 
@@ -210,7 +159,6 @@ async function handleMoveDown(folderName: string) {
 
 async function handleDragEnd() {
   drag.value = false
-  cleanupDragLock()
 
   // Flatten all groups back into a single array with updated sortOrder
   const allEntries = categoryOrder.flatMap(category => localGroupedEntries.value[category] || [])
@@ -239,14 +187,17 @@ async function handleGroupChange(category: string, evt: any) {
     try {
       // Update category in backend
       await sceneryStore.updateCategory(entry.folderName, newCategory)
-      // Reload data to get updated state
-      await sceneryStore.loadData()
-      syncLocalEntries()
     } catch (e) {
       console.error('Failed to update category:', e)
-      // Reload to revert UI
-      await sceneryStore.loadData()
-      syncLocalEntries()
+      suppressLoading.value = true
+      try {
+        await sceneryStore.loadData()
+        syncLocalEntries()
+      } catch (reloadError) {
+        console.error('Failed to reload scenery data:', reloadError)
+      } finally {
+        suppressLoading.value = false
+      }
     }
   }
 }
@@ -549,7 +500,7 @@ function clearSearch() {
     </div>
 
     <!-- Content -->
-    <div ref="listContainerRef" class="flex-1 overflow-y-auto" style="overflow-x: hidden;">
+    <div class="flex-1 overflow-y-auto" style="overflow-x: hidden;">
       <div v-if="!appStore.xplanePath" class="flex items-center justify-center h-full">
         <div class="text-center">
           <svg class="w-16 h-16 mx-auto text-gray-400 dark:text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -559,7 +510,7 @@ function clearSearch() {
         </div>
       </div>
 
-      <div v-else-if="sceneryStore.isLoading" class="flex items-center justify-center py-12">
+      <div v-else-if="sceneryStore.isLoading && !suppressLoading" class="flex items-center justify-center py-12">
         <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
       </div>
 
@@ -640,7 +591,9 @@ function clearSearch() {
               {{ t(getCategoryTranslationKey(category)) }}
             </span>
             <span class="text-xs font-medium text-gray-600 dark:text-gray-300 bg-white dark:bg-gray-800 px-2 py-0.5 rounded-full">
-              {{ localGroupedEntries[category]?.length || 0 }}
+              <span class="text-green-700 dark:text-green-300">{{ groupCounts[category]?.enabled ?? 0 }}</span>
+              <span class="mx-1 text-gray-400">/</span>
+              <span class="text-gray-600 dark:text-gray-400">{{ localGroupedEntries[category]?.length || 0 }}</span>
             </span>
           </div>
 
@@ -776,7 +729,6 @@ function clearSearch() {
 
 :global(.sortable-fallback) {
   opacity: 1 !important;
-  transform: scale(1.02) !important;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2), 0 0 0 2px rgb(59, 130, 246) !important;
   border-radius: 0.5rem !important;
   transition: none !important;
@@ -792,10 +744,10 @@ function clearSearch() {
 }
 
 :global(.sortable-chosen) {
-  opacity: 0 !important;
+  opacity: 0.35 !important;
 }
 
 :global(.sortable-drag) {
-  opacity: 0 !important;
+  opacity: 1 !important;
 }
 </style>
