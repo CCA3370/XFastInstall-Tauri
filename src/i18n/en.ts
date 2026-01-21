@@ -144,7 +144,10 @@ export default {
     sorting: 'Sorting...',
     scenerySorted: 'Scenery packs sorted successfully',
     scenerySortFailed: 'Failed to sort scenery packs',
+    createIndex: 'Create Index',
     rebuildIndex: 'Rebuild',
+    creatingIndex: 'Creating...',
+    createIndexTooltip: 'Create scenery index (first-time full scan)',
     rebuilding: 'Rebuilding...',
     rebuildIndexTooltip: 'Rebuild scenery index (re-scan all scenery packages)',
     indexRebuilt: 'Scenery index rebuilt successfully',
@@ -314,6 +317,7 @@ export default {
     changesApplied: 'Changes applied successfully',
     applyFailed: 'Failed to apply changes',
     noScenery: 'No scenery packages found',
+    noIndex: 'Scenery index has not been created yet',
     moveUp: 'Move up',
     moveDown: 'Move down',
     missingLibraries: 'Missing libraries',
@@ -345,6 +349,8 @@ export default {
     autoSortDone: 'Sort order reset. Click "Apply Changes" to save.',
     autoSortNoChange: 'Sort order is already optimal, no changes needed',
     autoSortFailed: 'Auto sort failed',
-    moreActions: 'More Actions'
+    moreActions: 'More Actions',
+    hintFromScan: 'Scenery changes detected. Open the Scenery Manager here to sort.',
+    hintFromSettings: 'Scenery sorting is enabled. Open the Scenery Manager here.'
   }
 }

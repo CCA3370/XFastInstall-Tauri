@@ -20,8 +20,8 @@ use std::collections::HashMap;
 use analyzer::Analyzer;
 use installer::Installer;
 use models::{
-    AnalysisResult, InstallResult, InstallTask, SceneryIndexStats, SceneryManagerData,
-    SceneryPackageInfo,
+    AnalysisResult, InstallResult, InstallTask, SceneryIndexScanResult, SceneryIndexStats,
+    SceneryIndexStatus, SceneryManagerData, SceneryPackageInfo,
 };
 use scenery_index::SceneryIndexManager;
 use scenery_packs_manager::SceneryPacksManager;
@@ -383,6 +383,34 @@ async fn get_scenery_index_stats(xplane_path: String) -> Result<SceneryIndexStat
 }
 
 #[tauri::command]
+async fn get_scenery_index_status(xplane_path: String) -> Result<SceneryIndexStatus, String> {
+    tokio::task::spawn_blocking(move || {
+        let xplane_path = std::path::Path::new(&xplane_path);
+        let index_manager = SceneryIndexManager::new(xplane_path);
+
+        index_manager
+            .index_status()
+            .map_err(|e| format!("Failed to get index status: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+#[tauri::command]
+async fn quick_scan_scenery_index(xplane_path: String) -> Result<SceneryIndexScanResult, String> {
+    tokio::task::spawn_blocking(move || {
+        let xplane_path = std::path::Path::new(&xplane_path);
+        let index_manager = SceneryIndexManager::new(xplane_path);
+
+        index_manager
+            .quick_scan_and_update()
+            .map_err(|e| format!("Failed to quick scan scenery index: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+#[tauri::command]
 async fn sync_scenery_packs_with_folder(xplane_path: String) -> Result<usize, String> {
     tokio::task::spawn_blocking(move || {
         let xplane_path = std::path::Path::new(&xplane_path);
@@ -529,6 +557,8 @@ pub fn run() {
             sort_scenery_packs,
             rebuild_scenery_index,
             get_scenery_index_stats,
+            get_scenery_index_status,
+            quick_scan_scenery_index,
             sync_scenery_packs_with_folder,
             // Scenery manager commands
             get_scenery_manager_data,

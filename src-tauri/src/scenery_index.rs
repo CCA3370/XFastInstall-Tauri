@@ -5,8 +5,8 @@
 
 use crate::logger;
 use crate::models::{
-    SceneryCategory, SceneryIndex, SceneryIndexStats, SceneryManagerData, SceneryManagerEntry,
-    SceneryPackageInfo,
+    SceneryCategory, SceneryIndex, SceneryIndexScanResult, SceneryIndexStats, SceneryIndexStatus,
+    SceneryManagerData, SceneryManagerEntry, SceneryPackageInfo,
 };
 use crate::scenery_classifier::classify_scenery;
 use anyhow::{anyhow, Result};
@@ -649,6 +649,62 @@ impl SceneryIndexManager {
         let info = classify_scenery(folder_path, &self.xplane_path)?;
         self.update_package(info.clone())?;
         Ok(info)
+    }
+
+    pub fn index_status(&self) -> Result<SceneryIndexStatus> {
+        let index_exists = self.index_path.exists();
+        let total_packages = if index_exists {
+            self.load_index()?.packages.len()
+        } else {
+            0
+        };
+
+        Ok(SceneryIndexStatus {
+            index_exists,
+            total_packages,
+        })
+    }
+
+    pub fn quick_scan_and_update(&self) -> Result<SceneryIndexScanResult> {
+        if !self.index_path.exists() {
+            return Ok(SceneryIndexScanResult {
+                index_exists: false,
+                added: 0,
+                removed: 0,
+                updated: 0,
+            });
+        }
+
+        let before_index = self.load_index()?;
+        let before_keys: HashSet<String> = before_index.packages.keys().cloned().collect();
+        let before_indexed_at: HashMap<String, SystemTime> = before_index
+            .packages
+            .iter()
+            .map(|(name, info)| (name.clone(), info.indexed_at))
+            .collect();
+
+        let after_index = self.update_index()?;
+        let after_keys: HashSet<String> = after_index.packages.keys().cloned().collect();
+
+        let added = after_keys.difference(&before_keys).count();
+        let removed = before_keys.difference(&after_keys).count();
+        let updated = after_index
+            .packages
+            .iter()
+            .filter(|(name, info)| {
+                before_indexed_at
+                    .get(*name)
+                    .map(|before_time| info.indexed_at > *before_time)
+                    .unwrap_or(false)
+            })
+            .count();
+
+        Ok(SceneryIndexScanResult {
+            index_exists: true,
+            added,
+            removed,
+            updated,
+        })
     }
 
     /// Get index statistics

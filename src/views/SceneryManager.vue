@@ -21,6 +21,7 @@ const isChineseLocale = computed(() => locale.value === 'zh')
 
 const drag = ref(false)
 const isSortingScenery = ref(false)
+const isCreatingIndex = ref(false)
 const searchQuery = ref('')
 const highlightedIndex = ref(-1)
 const currentMatchIndex = ref(0)
@@ -247,6 +248,7 @@ function handleReset() {
 }
 
 async function performAutoSort() {
+  if (!sceneryStore.indexExists) return
   isSortingScenery.value = true
   try {
     const hasChanges = await invoke<boolean>('sort_scenery_packs', { xplanePath: appStore.xplanePath })
@@ -271,7 +273,7 @@ async function performAutoSort() {
 }
 
 function handleSortSceneryNow() {
-  if (isSortingScenery.value || !appStore.xplanePath) return
+  if (isSortingScenery.value || !appStore.xplanePath || !sceneryStore.indexExists) return
 
   showMoreMenu.value = false
 
@@ -290,6 +292,22 @@ function handleSortSceneryNow() {
     },
     onCancel: () => {}
   })
+}
+
+async function handleCreateIndex() {
+  if (isCreatingIndex.value || !appStore.xplanePath) return
+
+  isCreatingIndex.value = true
+  try {
+    await invoke('rebuild_scenery_index', { xplanePath: appStore.xplanePath })
+    await sceneryStore.loadData()
+    syncLocalEntries()
+    toastStore.success(t('settings.indexRebuilt'))
+  } catch (e) {
+    modalStore.showError(t('settings.indexRebuildFailed') + ': ' + String(e))
+  } finally {
+    isCreatingIndex.value = false
+  }
 }
 
 function handleClickOutside(event: MouseEvent) {
@@ -428,7 +446,7 @@ function clearSearch() {
             v-if="isChineseLocale"
             key="auto-sort-button"
             @click="handleSortSceneryNow"
-            :disabled="isSortingScenery || !appStore.xplanePath"
+            :disabled="isSortingScenery || !appStore.xplanePath || !sceneryStore.indexExists"
             class="px-3 py-1.5 rounded-lg bg-cyan-500 text-white hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 text-sm"
           >
             <svg v-if="!isSortingScenery" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -463,7 +481,7 @@ function clearSearch() {
             >
               <button
                 @click="handleSortSceneryNow"
-                :disabled="isSortingScenery || !appStore.xplanePath"
+                :disabled="isSortingScenery || !appStore.xplanePath || !sceneryStore.indexExists"
                 class="w-full px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 <svg v-if="!isSortingScenery" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -489,7 +507,7 @@ function clearSearch() {
         </button>
         <button
           @click="handleApplyChanges"
-          :disabled="!sceneryStore.hasChanges || sceneryStore.isSaving"
+          :disabled="!sceneryStore.indexExists || !sceneryStore.hasChanges || sceneryStore.isSaving"
           class="px-3 py-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 text-sm"
         >
           <svg v-if="sceneryStore.isSaving" class="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24">
@@ -562,6 +580,25 @@ function clearSearch() {
 
       <div v-else-if="sceneryStore.error" class="text-center py-12">
         <p class="text-red-600 dark:text-red-400">{{ sceneryStore.error }}</p>
+      </div>
+
+      <div v-else-if="!sceneryStore.indexExists" class="text-center py-12">
+        <p class="text-gray-600 dark:text-gray-400 mb-4">{{ t('sceneryManager.noIndex') }}</p>
+        <div class="flex justify-center">
+          <button
+            @click="handleCreateIndex"
+            :disabled="isCreatingIndex"
+            class="px-4 py-2 rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm flex items-center justify-center space-x-2"
+          >
+            <svg v-if="!isCreatingIndex" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            <svg v-else class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+            </svg>
+            <span>{{ isCreatingIndex ? t('settings.creatingIndex') : t('settings.createIndex') }}</span>
+          </button>
+        </div>
       </div>
 
       <div v-else-if="sceneryStore.totalCount === 0" class="text-center py-12">
@@ -651,6 +688,7 @@ function clearSearch() {
                 :group="{ name: 'scenery', pull: true, put: true }"
                 item-key="folderName"
                 handle=".drag-handle"
+                :disabled="!sceneryStore.indexExists"
                 :animation="180"
                 :easing="'cubic-bezier(0.25, 0.8, 0.25, 1)'"
                 :force-fallback="true"
@@ -686,6 +724,7 @@ function clearSearch() {
                         :entry="element"
                         :index="getGlobalIndex(element.folderName)"
                         :total-count="sceneryStore.totalCount"
+                        :disable-reorder="!sceneryStore.indexExists"
                         @toggle-enabled="handleToggleEnabled"
                         @move-up="handleMoveUp"
                         @move-down="handleMoveDown"

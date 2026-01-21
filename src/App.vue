@@ -33,24 +33,41 @@
             </span>
           </router-link>
 
-          <!-- Scenery Manager Link (only show when auto-sort is enabled) -->
-          <router-link
-            v-if="store.autoSortScenery"
-            to="/scenery"
-            class="relative px-3 py-2 rounded-lg group overflow-hidden transition-all duration-300"
-            :class="$route.path === '/scenery' ? 'text-blue-600 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-white'"
-          >
+          <div v-if="store.autoSortScenery" class="relative flex items-center">
+            <router-link
+              to="/scenery"
+              class="relative px-3 py-2 rounded-lg group overflow-hidden transition-all duration-300"
+              :class="$route.path === '/scenery' ? 'text-blue-600 dark:text-white' : 'text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-white'"
+            >
+              <div
+                class="absolute inset-0 bg-blue-50 dark:bg-white/10 rounded-lg transition-all duration-300 transform origin-left"
+                :class="$route.path === '/scenery' ? 'scale-x-100 opacity-100' : 'scale-x-0 opacity-0 group-hover:scale-x-100 group-hover:opacity-50'"
+              ></div>
+              <span class="relative flex items-center space-x-1.5 text-sm font-medium z-10">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+                </svg>
+                <AnimatedText>{{ $t('sceneryManager.navTitle') }}</AnimatedText>
+              </span>
+            </router-link>
             <div
-              class="absolute inset-0 bg-blue-50 dark:bg-white/10 rounded-lg transition-all duration-300 transform origin-left"
-              :class="$route.path === '/scenery' ? 'scale-x-100 opacity-100' : 'scale-x-0 opacity-0 group-hover:scale-x-100 group-hover:opacity-50'"
-            ></div>
-            <span class="relative flex items-center space-x-1.5 text-sm font-medium z-10">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
-              </svg>
-              <AnimatedText>{{ $t('sceneryManager.navTitle') }}</AnimatedText>
-            </span>
-          </router-link>
+              v-if="store.sceneryManagerHintVisible && store.sceneryManagerHintMessageKey"
+              class="absolute left-1/2 top-full -translate-x-1/2 mt-2 z-50"
+            >
+              <div class="relative min-w-[240px] max-w-[340px] w-max bg-cyan-50 dark:bg-cyan-900/60 border border-cyan-200 dark:border-cyan-700 text-cyan-900 dark:text-cyan-100 text-xs px-3 py-2 rounded-lg shadow-lg flex items-start gap-2">
+                <div class="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-cyan-50 dark:bg-cyan-900/60 border-l border-t border-cyan-200 dark:border-cyan-700 rotate-45"></div>
+                <span class="leading-4">{{ $t(store.sceneryManagerHintMessageKey) }}</span>
+                <button
+                  class="ml-1 text-cyan-700/80 dark:text-cyan-200/80 hover:text-cyan-900 dark:hover:text-white"
+                  @click="store.dismissSceneryManagerHint()"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
 
           <router-link
             to="/settings"
@@ -114,11 +131,31 @@ import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
 import AnimatedText from '@/components/AnimatedText.vue'
 import ErrorModal from '@/components/ErrorModal.vue'
 import ConfirmModal from '@/components/ConfirmModal.vue'
+import type { SceneryIndexScanResult } from '@/types'
 
 const { t } = useI18n()
 const store = useAppStore()
 const updateStore = useUpdateStore()
 const router = useRouter()
+
+async function runSceneryIndexStartupScan() {
+  if (!store.xplanePath) return
+
+  try {
+    const result = await invoke<SceneryIndexScanResult>('quick_scan_scenery_index', {
+      xplanePath: store.xplanePath
+    })
+
+    if (!result.indexExists) return
+
+    const hasChanges = result.added + result.removed + result.updated > 0
+    if (hasChanges && store.autoSortScenery) {
+      store.showSceneryManagerHint('sceneryManager.hintFromScan')
+    }
+  } catch (error) {
+    console.error('Failed to quick scan scenery index:', error)
+  }
+}
 
 onMounted(async () => {
   // Log app startup (basic level - always logged)
@@ -144,6 +181,8 @@ onMounted(async () => {
   } catch (error) {
     console.error('Failed to detect platform:', error)
   }
+
+  runSceneryIndexStartupScan()
 
   // Non-blocking sync locale to backend (moved from i18n module top-level)
   syncLocaleToBackend()

@@ -161,6 +161,18 @@ export interface SceneryIndexStats {
   lastUpdated: number;
 }
 
+export interface SceneryIndexStatus {
+  indexExists: boolean;
+  totalPackages: number;
+}
+
+export interface SceneryIndexScanResult {
+  indexExists: boolean;
+  added: number;
+  removed: number;
+  updated: number;
+}
+
 export interface SceneryManagerEntry {
   folderName: string;
   category: SceneryCategory;

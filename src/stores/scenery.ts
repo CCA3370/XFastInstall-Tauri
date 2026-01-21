@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
-import type { SceneryManagerData, SceneryManagerEntry, SceneryCategory } from '@/types'
+import type { SceneryIndexStatus, SceneryManagerData, SceneryManagerEntry, SceneryCategory } from '@/types'
 import { useAppStore } from './app'
 
 export const useSceneryStore = defineStore('scenery', () => {
@@ -12,6 +12,7 @@ export const useSceneryStore = defineStore('scenery', () => {
   const isLoading = ref(false)
   const isSaving = ref(false)
   const error = ref<string | null>(null)
+  const indexExists = ref(false)
 
   // Track original state for change detection
   const originalEntries = ref<SceneryManagerEntry[]>([])
@@ -83,10 +84,12 @@ export const useSceneryStore = defineStore('scenery', () => {
   // Load scenery data from backend
   async function loadData() {
     if (!appStore.xplanePath) {
+      indexExists.value = false
       error.value = 'X-Plane path not set'
       return
     }
 
+    await loadIndexStatus()
     isLoading.value = true
     error.value = null
 
@@ -102,6 +105,23 @@ export const useSceneryStore = defineStore('scenery', () => {
       console.error('Failed to load scenery data:', e)
     } finally {
       isLoading.value = false
+    }
+  }
+
+  async function loadIndexStatus() {
+    if (!appStore.xplanePath) {
+      indexExists.value = false
+      return
+    }
+
+    try {
+      const status = await invoke<SceneryIndexStatus>('get_scenery_index_status', {
+        xplanePath: appStore.xplanePath
+      })
+      indexExists.value = status.indexExists
+    } catch (e) {
+      indexExists.value = false
+      console.error('Failed to load scenery index status:', e)
     }
   }
 
@@ -282,9 +302,11 @@ export const useSceneryStore = defineStore('scenery', () => {
     enabledCount,
     missingDepsCount,
     hasChanges,
+    indexExists,
 
     // Actions
     loadData,
+    loadIndexStatus,
     toggleEnabled,
     updateCategory,
     moveEntry,

@@ -377,6 +377,22 @@ pub struct SceneryIndexStats {
     pub last_updated: SystemTime,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneryIndexStatus {
+    pub index_exists: bool,
+    pub total_packages: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneryIndexScanResult {
+    pub index_exists: bool,
+    pub added: usize,
+    pub removed: usize,
+    pub updated: usize,
+}
+
 /// Entry for scenery manager UI
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

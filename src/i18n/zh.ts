@@ -157,7 +157,10 @@ export default {
     sorting: '排序中...',
     scenerySorted: '地景排序完成',
     scenerySortFailed: '地景排序失败',
+    createIndex: '创建索引',
     rebuildIndex: '重建索引',
+    creatingIndex: '创建中...',
+    createIndexTooltip: '创建地景索引（首次扫描所有地景包）',
     rebuilding: '重建中...',
     rebuildIndexTooltip: '重建地景索引（重新扫描所有地景包）',
     indexRebuilt: '地景索引重建完成',
@@ -327,6 +330,7 @@ export default {
     changesApplied: '更改已成功应用',
     applyFailed: '应用更改失败',
     noScenery: '未找到地景包',
+    noIndex: '尚未创建地景索引',
     moveUp: '上移',
     moveDown: '下移',
     missingLibraries: '缺少库',
@@ -358,6 +362,8 @@ export default {
     autoSortDone: '已重置排序，点击"应用更改"写入文件',
     autoSortNoChange: '排序已是最优，无需更改',
     autoSortFailed: '自动排序失败',
-    moreActions: '更多操作'
+    moreActions: '更多操作',
+    hintFromScan: '检测到地景变化，请从这里进入地景管理器进行排序',
+    hintFromSettings: '已启用地景排序，请从这里进入地景管理器进行排序'
   }
 }
