@@ -1,6 +1,6 @@
 <!-- Main App Component -->
 <template>
-  <div class="app-container transition-colors duration-300 bg-slate-50 dark:bg-gradient-to-br dark:from-gray-900 dark:via-slate-900 dark:to-gray-900 text-gray-900 dark:text-gray-100 font-sans selection:bg-blue-500/30">
+  <div class="app-container transition-colors duration-300 text-gray-900 dark:text-gray-100 font-sans selection:bg-blue-500/30">
     
     <!-- Navbar -->
     <nav class="fixed top-0 left-0 w-full z-50 transition-all duration-300">
@@ -221,6 +221,8 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: linear-gradient(135deg, var(--app-bg-from), var(--app-bg-via), var(--app-bg-to));
+  background-color: var(--app-bg-from);
 }
 
 .main-content {
@@ -305,4 +307,5 @@ onMounted(async () => {
 .nav-link:hover::before {
   left: 100%;
 }
+
 </style>

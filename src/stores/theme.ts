@@ -9,6 +9,9 @@ export const useThemeStore = defineStore('theme', () => {
 
   let syncRetryCount = 0
   const MAX_SYNC_RETRIES = 3
+  const THEME_TRANSITION_DURATION_MS = 500
+  let themeTransitionTimer: number | undefined
+  let windowThemeTimer: number | undefined
 
   function toggleTheme() {
     isDark.value = !isDark.value
@@ -36,23 +39,57 @@ export const useThemeStore = defineStore('theme', () => {
     // Check if there are many expanded scenery entries (performance optimization)
     const expandedEntries = document.querySelectorAll('[data-scenery-index]')
     const isLargeList = expandedEntries.length > 100
+    const transitionDurationMs = shouldSmoothThemeTransition() ? THEME_TRANSITION_DURATION_MS : 0
 
     if (isLargeList) {
       // For large lists, use progressive theme switching
-      await applyThemeProgressively(expandedEntries)
+      await applyThemeProgressively(expandedEntries, transitionDurationMs)
     } else {
       // For small lists, use instant theme switching
-      await applyThemeInstantly()
+      await applyThemeInstantly(transitionDurationMs)
     }
 
     // Sync Tauri window theme with app theme (with retry logic)
-    await syncWindowTheme()
+    if (transitionDurationMs > 0) {
+      syncWindowThemeWithDelay(transitionDurationMs)
+    } else {
+      await syncWindowTheme()
+    }
   }
 
-  async function applyThemeInstantly() {
-    // Disable transitions during theme change to prevent lag
+  function shouldSmoothThemeTransition(): boolean {
+    if (typeof document === 'undefined') return false
+    return !document.querySelector('.scenery-manager-view')
+  }
+
+  function scheduleThemeTransitionCleanup(transitionDurationMs: number) {
+    if (themeTransitionTimer !== undefined) {
+      window.clearTimeout(themeTransitionTimer)
+    }
+    themeTransitionTimer = window.setTimeout(() => {
+      document.documentElement.classList.remove('theme-transitioning')
+      themeTransitionTimer = undefined
+    }, transitionDurationMs)
+  }
+
+  function syncWindowThemeWithDelay(delayMs: number) {
+    if (windowThemeTimer !== undefined) {
+      window.clearTimeout(windowThemeTimer)
+      windowThemeTimer = undefined
+    }
+    if (delayMs <= 0) {
+      void syncWindowTheme()
+      return
+    }
+    windowThemeTimer = window.setTimeout(() => {
+      void syncWindowTheme()
+      windowThemeTimer = undefined
+    }, delayMs)
+  }
+
+  async function applyThemeInstantly(transitionDurationMs: number) {
     document.documentElement.classList.add('theme-transitioning')
-    document.documentElement.style.setProperty('--theme-transition-duration', '50ms')
+    document.documentElement.style.setProperty('--theme-transition-duration', `${transitionDurationMs}ms`)
 
     if (isDark.value) {
       document.documentElement.classList.add('dark')
@@ -62,12 +99,13 @@ export const useThemeStore = defineStore('theme', () => {
       localStorage.setItem('theme', 'light')
     }
 
-    setTimeout(() => {
-      document.documentElement.classList.remove('theme-transitioning')
-    }, 50)
+    scheduleThemeTransitionCleanup(transitionDurationMs)
   }
 
-  async function applyThemeProgressively(entries: NodeListOf<Element>) {
+  async function applyThemeProgressively(entries: NodeListOf<Element>, transitionDurationMs: number) {
+    document.documentElement.classList.add('theme-transitioning')
+    document.documentElement.style.setProperty('--theme-transition-duration', `${transitionDurationMs}ms`)
+
     // Apply theme to root first (for navbar, background, etc.)
     if (isDark.value) {
       document.documentElement.classList.add('dark')
@@ -76,9 +114,6 @@ export const useThemeStore = defineStore('theme', () => {
       document.documentElement.classList.remove('dark')
       localStorage.setItem('theme', 'light')
     }
-
-    // Disable transitions globally
-    document.documentElement.classList.add('theme-transitioning')
 
     // Get viewport bounds
     const viewportHeight = window.innerHeight
@@ -131,9 +166,7 @@ export const useThemeStore = defineStore('theme', () => {
     }
 
     // Re-enable transitions after all batches are done
-    setTimeout(() => {
-      document.documentElement.classList.remove('theme-transitioning')
-    }, 50)
+    scheduleThemeTransitionCleanup(transitionDurationMs)
   }
 
   function chunkArray<T>(array: T[], size: number): T[][] {

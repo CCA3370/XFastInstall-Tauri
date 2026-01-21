@@ -24,6 +24,7 @@ const isSortingScenery = ref(false)
 const searchQuery = ref('')
 const highlightedIndex = ref(-1)
 const currentMatchIndex = ref(0)
+const searchExpandedGroups = ref<Record<string, boolean>>({})
 const showOnlyMissingLibs = ref(false)
 const showMoreMenu = ref(false)
 const suppressLoading = ref(false)
@@ -56,10 +57,14 @@ const groupCounts = computed(() => {
 
 // Filtered entries based on missing libraries filter
 const filteredEntries = computed(() => {
-  const allEntries = Object.values(localGroupedEntries.value).flat()
+  const allEntries = categoryOrder.flatMap(category => localGroupedEntries.value[category] || [])
   if (!showOnlyMissingLibs.value) return allEntries
   return allEntries.filter(entry => entry.missingLibraries && entry.missingLibraries.length > 0)
 })
+
+function isGroupExpanded(category: string): boolean {
+  return !sceneryStore.collapsedGroups[category] || !!searchExpandedGroups.value[category]
+}
 
 // Matched indices in the filtered list
 const matchedIndices = computed(() => {
@@ -88,7 +93,15 @@ function syncLocalEntries() {
 
 // Toggle group collapse state
 function toggleGroupCollapse(category: string) {
-  sceneryStore.collapsedGroups[category] = !sceneryStore.collapsedGroups[category]
+  const expanded = isGroupExpanded(category)
+  if (expanded) {
+    sceneryStore.collapsedGroups[category] = true
+    if (searchExpandedGroups.value[category]) {
+      delete searchExpandedGroups.value[category]
+    }
+  } else {
+    sceneryStore.collapsedGroups[category] = false
+  }
 }
 
 // Get category translation key
@@ -280,22 +293,48 @@ function handleClickOutside(event: MouseEvent) {
 }
 
 // Search navigation functions
+function ensureGroupExpandedForIndex(index: number) {
+  if (showOnlyMissingLibs.value) return
+  const entry = filteredEntries.value[index]
+  if (!entry) return
+  if (sceneryStore.collapsedGroups[entry.category]) {
+    searchExpandedGroups.value[entry.category] = true
+  }
+}
+
 function scrollToMatch(index: number) {
-  setTimeout(() => {
-    const element = document.querySelector(`[data-scenery-index="${index}"]`)
-    if (element) {
+  ensureGroupExpandedForIndex(index)
+  highlightedIndex.value = index
+
+  const attemptScroll = (attempt: number) => {
+    if (highlightedIndex.value !== index) return
+    const element = document.querySelector(`[data-scenery-index="${index}"]`) as HTMLElement | null
+    if (element && element.getClientRects().length > 0) {
       element.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      highlightedIndex.value = index
+      return
     }
-  }, 100)
+    if (attempt < 6) {
+      setTimeout(() => attemptScroll(attempt + 1), 60)
+    }
+  }
+
+  setTimeout(() => attemptScroll(0), 0)
 }
 
 function handleSearchInput() {
+  if (!searchQuery.value.trim()) {
+    highlightedIndex.value = -1
+    currentMatchIndex.value = 0
+    searchExpandedGroups.value = {}
+    return
+  }
+
   if (matchedIndices.value.length > 0) {
     currentMatchIndex.value = 0
     scrollToMatch(matchedIndices.value[0])
   } else {
     highlightedIndex.value = -1
+    searchExpandedGroups.value = {}
   }
 }
 
@@ -315,6 +354,7 @@ function clearSearch() {
   searchQuery.value = ''
   highlightedIndex.value = -1
   currentMatchIndex.value = 0
+  searchExpandedGroups.value = {}
 }
 </script>
 
@@ -578,7 +618,7 @@ function clearSearch() {
             <!-- Collapse/Expand Icon -->
             <svg
               class="w-4 h-4 text-gray-700 dark:text-gray-200 transition-transform duration-200"
-              :class="{ 'rotate-90': !sceneryStore.collapsedGroups[category] }"
+              :class="{ 'rotate-90': isGroupExpanded(category) }"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -599,7 +639,7 @@ function clearSearch() {
 
           <!-- Group Content (Collapsible) -->
           <Transition name="collapse">
-            <div v-if="!sceneryStore.collapsedGroups[category]" style="overflow: visible;">
+            <div v-if="isGroupExpanded(category)" style="overflow: visible;">
               <draggable
                 v-model="localGroupedEntries[category]"
                 :group="{ name: 'scenery', pull: true, put: true }"
@@ -618,15 +658,15 @@ function clearSearch() {
                 class="space-y-1.5"
                 style="overflow: visible; padding: 0 0.5rem;"
               >
-                <template #item="{ element, index }">
+                <template #item="{ element }">
                   <div
-                    :data-scenery-index="index"
+                    :data-scenery-index="getGlobalIndex(element.folderName)"
                     class="relative"
                     style="scroll-margin-top: 100px"
                   >
                     <!-- Highlight ring overlay -->
                     <div
-                      v-if="highlightedIndex === index"
+                      v-if="highlightedIndex === getGlobalIndex(element.folderName)"
                       class="absolute inset-0 ring-4 ring-blue-500 rounded-lg pointer-events-none"
                     ></div>
 
