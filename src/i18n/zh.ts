@@ -314,6 +314,13 @@ export default {
     includePreRelease: '包含预发布版本',
     includePreReleaseDesc: '检查更新时包含 Beta/RC 等预发布版本'
   },
+  onboarding: {
+    title: '首次使用引导',
+    subtitle: '按步骤选择需要启用的功能',
+    next: '下一步',
+    back: '上一步',
+    finish: '完成'
+  },
   sceneryManager: {
     title: '地景管理器',
     subtitle: '管理地景加载顺序和启用状态',

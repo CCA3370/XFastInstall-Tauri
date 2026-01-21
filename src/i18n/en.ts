@@ -301,6 +301,13 @@ export default {
     includePreRelease: 'Include Pre-releases',
     includePreReleaseDesc: 'Include Beta/RC and other pre-release versions when checking for updates'
   },
+  onboarding: {
+    title: 'First-Run Setup',
+    subtitle: 'Choose which features you want to enable',
+    next: 'Next',
+    back: 'Back',
+    finish: 'Finish'
+  },
   sceneryManager: {
     title: 'Scenery Manager',
     subtitle: 'Manage scenery loading order and enabled state',

@@ -3,7 +3,7 @@
   <div class="app-container transition-colors duration-300 text-gray-900 dark:text-gray-100 font-sans selection:bg-blue-500/30">
     
     <!-- Navbar -->
-    <nav class="fixed top-0 left-0 w-full z-50 transition-all duration-300">
+    <nav v-if="!isOnboardingRoute" class="fixed top-0 left-0 w-full z-50 transition-all duration-300">
       <div class="absolute inset-0 bg-white/70 dark:bg-gray-900/70 backdrop-blur-xl border-b border-gray-200/50 dark:border-white/5 shadow-sm dark:shadow-2xl transition-colors duration-300"></div>
       
       <div class="relative container mx-auto px-6 h-12 flex justify-between items-center">
@@ -98,7 +98,7 @@
     </nav>
 
     <!-- Main Content -->
-    <main :class="['main-content', 'pt-12', 'flex-1', 'min-h-0', 'overflow-hidden', { 'hide-scrollbar': $route.path === '/' }]">
+    <main :class="['main-content', isOnboardingRoute ? 'pt-0' : 'pt-12', 'flex-1', 'min-h-0', 'overflow-hidden', { 'hide-scrollbar': $route.path === '/' }]">
       <div class="h-full overflow-y-auto">
         <router-view v-slot="{ Component }">
           <transition name="page" mode="out-in">
@@ -116,8 +116,8 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { onMounted, computed } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useUpdateStore } from '@/stores/update'
@@ -137,6 +137,8 @@ const { t } = useI18n()
 const store = useAppStore()
 const updateStore = useUpdateStore()
 const router = useRouter()
+const route = useRoute()
+const isOnboardingRoute = computed(() => route.path === '/onboarding')
 
 async function runSceneryIndexStartupScan() {
   if (!store.xplanePath) return
