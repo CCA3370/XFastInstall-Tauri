@@ -5,124 +5,116 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] - 2026-01-21
 
 ### Added
-- **Scenery Manager Grouping** - Added collapsible category groups to scenery manager
-  - Scenery entries are now organized into 8 collapsible groups by category
-  - Groups display category name and count (e.g., "机场 (162)")
-  - Click group headers to expand/collapse, state persists to localStorage
-  - Support for cross-group drag-and-drop to change scenery category
-  - Within-group drag-and-drop to reorder scenery
-  - Smooth collapse/expand animations with rotating chevron icons
 
-### Fixed
-- **SAM Library Detection** - Fixed incorrect SAM library detection
-  - SAM detection now uses enhanced pattern matching with multiple rules
-  - Matches "sam" as a separate word: "SAM_Library", "open_SAM_library"
-  - Matches common SAM library patterns: "openSAM", "openSAM_Library", "mySAM"
-  - Correctly excludes airport codes: "A-ZSAM - Xiamen" (ZSAM is not matched)
-  - Correctly excludes unrelated words: "sample", "sesame"
-  - SAM detection happens during classification phase for libraries without Earth nav data
-- **Shortcut Sorting** - Fixed sorting to use shortcut target folder name instead of .lnk filename
-  - When sorting scenery_packs.ini, shortcuts are now resolved to get the actual target folder name
-  - XPME detection now works correctly for shortcuts pointing to XPME scenery
-  - Index now stores target folder name as key (not .lnk filename) for consistent lookups
-- **Other Category Sorting** - Moved "Other" category to sort after Library
-  - New order: Library (3) → Other (4) → Overlay (5) → Orthophotos/Mesh (6)
-  - This places unknown/unclassified scenery before overlays and terrain
-- **XPME Orthophotos Sorting** - Fixed XPME orthophotos being sorted incorrectly
-  - XPME scenery classified as Orthophotos (by Ortho4XP detection) now correctly sorted to bottom
-  - Both Orthophotos and Mesh categories now check for "xpme" in folder name during sorting
-  - Final order: Regular Orthophotos (6,0) → Regular Mesh (6,1) → XPME (6,2)
-- **Scenery Classification** - Fixed terrain reference detection in DSF files
-  - Now correctly extracts TRET (terrain) definitions separately from OBJT (object) definitions
-  - Mesh scenery packages are now properly detected by checking `terrain_references` field
-  - Added detailed debug logging showing terrain reference count and samples
-  - **Major performance optimization**: Only scans first DSF file found (instead of all DSF files)
-  - **Major performance optimization**: apt.dat search limited to Earth nav data folder with max depth 5
-  - **Major performance optimization**: Texture counting stops after finding 5 files (sufficient for classification)
-  - These optimizations dramatically improve indexing speed for large scenery packages (Ortho4XP, etc.)
-- **Symbolic Link Support** - Enhanced symbolic link handling in scenery scanning
-  - All file system traversal now explicitly follows symbolic links using `.follow_links(true)`
-  - File and directory checks use `metadata()` to properly follow symlinks
-  - Applies to: apt.dat search, DSF file search, texture counting, plugin detection, and validation checks
-  - Added debug logging to show symlink targets for troubleshooting
-- **Windows Shortcut Support** - Fixed shortcut handling in index updates
-  - Shortcuts are now properly recognized during index updates and sorting
-  - Fixed issue where shortcuts were incorrectly marked as "stale entries" and removed
-  - Shortcuts now persist correctly in scenery index across updates
-- **Scenery Sorting** - Improved sorting logic to be index-based
-  - Sorting now creates entries from scenery index instead of filtering existing ini entries
-  - Automatically creates scenery_packs.ini if it doesn't exist
-  - Preserves enabled/disabled state from existing ini file
-  - All scenery in Custom Scenery folder will be added to ini during sort
+#### Scenery Manager
+- **Complete Scenery Management Interface** - New dedicated page for managing X-Plane scenery packages
+  - Visual interface for viewing and organizing all scenery in Custom Scenery folder
+  - Real-time sync with scenery_packs.ini file
+  - Enable/disable scenery packages with toggle switches
+  - Drag-and-drop reordering within and across categories
+  - Search functionality to quickly find scenery packages
+  - Collapsible category groups with entry counts (e.g., "机场 (162)")
+  - Missing library dependency warnings with visual indicators
+  - Apply changes button to save modifications to scenery_packs.ini
+  - Automatic backup creation before applying changes
 
-### Added
-- **Runtime Log Level Control** - Added ability to control log level at runtime
-  - New `set_log_level` command to set log level (Debug/Info/Error)
-  - Scenery index rebuilding now uses parallel processing when not in debug log mode
-  - Sequential processing only used when debug logging is enabled (for ordered logs)
-  - Significantly improves performance in production use (Info/Error log levels)
-- **Alphabetical Sorting Within Categories** - Scenery now sorted alphabetically within same category
-  - After sorting by category priority, entries are sorted by folder name (case-insensitive)
-  - Shortcuts use target folder name for alphabetical sorting (not .lnk filename)
-  - Provides consistent, predictable ordering within each category
-- **Windows Shortcut Support** - Now supports Windows shortcuts (.lnk files) in Custom Scenery folder
-  - Automatically resolves .lnk shortcuts to their target directories
-  - Logs shortcut resolution in info logs for transparency
+#### Scenery Auto-Sorting System
+- **Intelligent Scenery Classification** - Automatically categorizes scenery packages
+  - Analyzes DSF file headers and folder structure
+  - 8 classification categories with priority-based sorting:
+    1. FixedHighPriority - SAM libraries (SAM_Library, openSAM, etc.)
+    2. Airport - Scenery with apt.dat files
+    3. DefaultAirport - X-Plane's *GLOBAL_AIRPORTS* marker
+    4. Library - Packages with library.txt but no Earth nav data
+    5. Other - Unclassified scenery
+    6. Overlay - Scenery with sim/overlay property
+    7. Orthophotos - Ortho4XP imagery (detected by creation agent)
+    8. Mesh - Terrain mesh packages
+  - Parses DSF PROP section for sim/overlay, sim/creation_agent, sim/filter/aptid
+  - Detects terrain references (TRET) vs object references (OBJT)
+  - Recursive apt.dat search with depth limits for performance
+  - Plugin detection for "Other" category classification
+
+- **Persistent Scenery Index** - Fast caching system for scenery metadata
+  - Stored at %LOCALAPPDATA%/XFastInstall/scenery_index.json (Windows)
+  - Automatic cache invalidation based on directory modification time
+  - Parallel scanning with rayon for large scenery collections
+  - Tracks: category, sub-priority, file counts, library dependencies, tile coverage
+  - Manual rebuild index button in settings
+
+- **Earth Nav Tile Coverage Sorting** - Sorts scenery by geographic coverage
+  - Counts 10-degree tile folders under Earth nav data (e.g., "+30+110")
+  - Scenery with more tiles sorted before scenery with fewer tiles
+  - Ensures large coverage areas load before small regional scenery
+
+- **Alphabetical Sorting Within Categories** - Consistent ordering
+  - After category priority, entries sorted by folder name (case-insensitive)
+  - Provides predictable, organized scenery list
+
+- **Auto-Sort After Installation** - Optional automatic sorting
+  - Toggle in settings to enable/disable auto-sorting after scenery installation
+  - Smart insertion: only inserts newly installed scenery at correct position
+  - Preserves user's manual ordering of existing scenery
+  - Marked as experimental feature in settings UI
+
+- **Manual Sort Button** - Sort all scenery on demand
+  - "Sort All Scenery Now" button in settings
+  - Creates timestamped backup before modifying scenery_packs.ini
+  - Atomic file write (temp file + rename) for safety
+
+#### Enhanced Scenery Detection
+- **SAM Library Priority** - SAM libraries automatically promoted to highest priority
+  - Enhanced pattern matching: "SAM_Library", "open_SAM_library", "openSAM", "mySAM"
+  - Correctly excludes airport codes (e.g., "ZSAM") and unrelated words (e.g., "sample")
+  - Ensures SAM libraries load first for proper airport animations
+
+- **Windows Shortcut Support** - Full support for .lnk files in Custom Scenery
+  - Automatically resolves shortcuts to target directories
+  - Shortcut target folder name used for sorting and classification
   - Works alongside symbolic links (mklink) for maximum compatibility
-- **Plugin Detection for "Other" Category** - Scenery packages with plugins but no scenery features
-  - If a folder has `plugins/` with `.xpl` files (up to 5 levels deep) but no scenery features, classify as "Other"
-  - "Other" category is sorted below Library in scenery_packs.ini
-  - Useful for scenery packages that bundle plugins (e.g., airport scenery with custom plugins)
-- **XPME Mesh Special Sorting** - XPME mesh scenery sorted to bottom
-  - Orthophotos and Mesh now share the same category priority (6) with sub-priorities
-  - Sorting order: Orthophotos (6,0) → Regular Mesh (6,1) → XPME Mesh (6,2)
-  - This ensures XPME orthophoto mesh loads last, as intended by the scenery design
-- **Scenery Auto-Sorting (Experimental)** - Automatically sort `scenery_packs.ini` after scenery installation
-  - Marked as experimental feature in settings UI with amber badge, dashed border, inner glow, and standard shadow
-  - Classifies scenery packages by analyzing DSF file headers and folder structure
-  - **Validation** - Only processes folders with `Earth nav data` or `library.txt` as valid scenery
-  - **Auto-cleanup** - Automatically removes invalid scenery entries from ini during sorting
-  - **Symlink Support** - Correctly handles symbolic links (shortcuts) in Custom Scenery folder
-  - **Rebuild Index Button** - Added button to manually rebuild scenery index (re-scan all packages)
-  - **Improved Ortho4XP Detection** - Checks for `.mesh` files to distinguish Mesh from Orthophotos
-  - **Improved X-Plane Scenery Creator Detection** - Checks `sim/overlay` property to distinguish Overlay from Mesh
-  - **Debug Logging** - Detailed classification logs in debug mode showing decision process for each scenery
-    - Sequential processing in debug builds for ordered log output
-    - Parallel processing in release builds for optimal performance
-  - **Classification Categories** (sorted by loading priority):
-    1. **FixedHighPriority** - SAM libraries (SAM_Library, openSAM, etc.)
-    2. **Airport** - Scenery with `apt.dat` files
-    3. **DefaultAirport** - X-Plane's `*GLOBAL_AIRPORTS*` marker
-    4. **Library** - Packages with `library.txt` but no Earth nav data
-    5. **Overlay** - Scenery with `sim/overlay` property or custom objects
-    6. **Orthophotos** - Ortho4XP imagery (detected by 7z compression or creation agent)
-    7. **Mesh** - Terrain mesh packages
-    8. **Other** - Unclassified scenery
-  - **Intelligent Detection**:
-    - Uses decision tree logic for clear, deterministic classification
-    - Parses DSF file PROP section for `sim/overlay`, `sim/creation_agent`, `sim/filter/aptid`
-    - Recursive `apt.dat` search up to 15 directory levels
-    - Checks for TERRAIN_DEF references in DSF files
-  - **Persistent Index** - Caches scenery classifications for fast subsequent operations
-    - Index stored at `%LOCALAPPDATA%/XFastInstall/scenery_index.json` (Windows)
-    - Automatic cache invalidation based on directory modification time
-    - Parallel scanning with rayon for large scenery collections
-  - **Settings UI**:
-    - Toggle to enable/disable auto-sorting after scenery installation
-    - "Sort All Scenery Now" button for manual sorting
-    - Expandable explanation section with feature benefits
-  - **Safety Features**:
-    - Creates timestamped backup before modifying `scenery_packs.ini`
-    - Atomic file write (writes to temp file, then renames)
-    - Preserves `SCENERY_PACK_DISABLED` entries
-    - Maintains relative order within same category (stable sort)
-  - **Smart Insertion** - Only inserts newly installed scenery at correct position
-    - Does not re-sort existing scenery entries
-    - Preserves user's manual ordering of existing scenery
-    - Finds correct insertion point based on category priority
+  - Proper handling in index updates and sorting operations
+
+- **Symbolic Link Support** - Enhanced symlink handling
+  - All file system traversal explicitly follows symbolic links
+  - Applies to: apt.dat search, DSF file search, texture counting, validation
+  - Debug logging shows symlink targets for troubleshooting
+
+#### UI/UX Improvements
+- **Enhanced Theme Transitions** - Smoother theme switching experience
+  - Improved animation timing and easing
+  - Better visual feedback during theme changes
+
+- **Search Functionality** - Quick scenery filtering
+  - Real-time search across all scenery packages
+  - Automatically expands collapsed groups when search matches found
+  - Clear search button for quick reset
+
+- **Grouped Display** - Organized category view
+  - 8 collapsible category groups with rotating chevron icons
+  - Group collapse state persists to localStorage
+  - Smooth expand/collapse animations
+  - Visual separation between categories
+
+#### Performance Optimizations
+- **Runtime Log Level Control** - Dynamic logging configuration
+  - New set_log_level command (Debug/Info/Error)
+  - Parallel processing enabled when not in debug mode
+  - Sequential processing only for debug builds (ordered logs)
+  - Significantly faster indexing in production
+
+- **Scenery Classification Performance** - Major speed improvements
+  - Only scans first DSF file found (not all DSF files)
+  - apt.dat search limited to Earth nav data folder with max depth 5
+  - Texture counting stops after finding 5 files (sufficient for classification)
+  - Dramatically faster indexing for large scenery packages (Ortho4XP, etc.)
+
+### Changed
+- **Scenery Installation Flow** - Optional auto-sorting integration
+  - install_addons command now accepts auto_sort_scenery parameter
+  - Newly installed scenery automatically sorted if enabled in settings
 
 ## [0.4.1] - 2026-01-17
 
