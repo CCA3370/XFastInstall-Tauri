@@ -1,6 +1,36 @@
 @import "tailwindcss";
 @variant dark (&:where(.dark, .dark *));
 
+@property --app-bg-from {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #f8fafc;
+}
+
+@property --app-bg-via {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #f8fafc;
+}
+
+@property --app-bg-to {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #f8fafc;
+}
+
+.app-container {
+  --app-bg-from: #f8fafc;
+  --app-bg-via: #f8fafc;
+  --app-bg-to: #f8fafc;
+}
+
+.dark .app-container {
+  --app-bg-from: #111827;
+  --app-bg-via: #0f172a;
+  --app-bg-to: #111827;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
 }
@@ -19,6 +49,15 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Smooth color transition during theme change */
+.theme-transitioning *,
+.theme-transitioning *::before,
+.theme-transitioning *::after {
+  transition-property: background-color, color, border-color, fill, stroke, box-shadow, outline-color, --app-bg-from, --app-bg-via, --app-bg-to !important;
+  transition-duration: var(--theme-transition-duration, 500ms) !important;
+  transition-timing-function: ease !important;
 }
 
 /* Scrollbar styling */

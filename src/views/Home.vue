@@ -779,7 +779,8 @@ async function handleInstall() {
       tasks: tasksWithOverwrite,
       atomicInstallEnabled: store.atomicInstallEnabled,
       xplanePath: store.xplanePath,
-      deleteSourceAfterInstall: store.deleteSourceAfterInstall
+      deleteSourceAfterInstall: store.deleteSourceAfterInstall,
+      autoSortScenery: store.autoSortScenery
     })
 
     // Log results

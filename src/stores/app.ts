@@ -55,6 +55,9 @@ export const useAppStore = defineStore('app', () => {
   // Delete source files after successful installation (default: disabled)
   const deleteSourceAfterInstall = ref(false)
 
+  // Scenery auto-sorting (default: disabled)
+  const autoSortScenery = ref(false)
+
   // Overwrite settings per task (taskId -> shouldOverwrite)
   const overwriteSettings = ref<Record<string, boolean>>({})
 
@@ -180,6 +183,17 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
+  // Load scenery auto-sort setting
+  const savedAutoSortScenery = localStorage.getItem('autoSortScenery')
+  if (savedAutoSortScenery !== null) {
+    try {
+      autoSortScenery.value = JSON.parse(savedAutoSortScenery)
+    } catch (e) {
+      console.error('Failed to parse auto-sort scenery setting, using default', e)
+      localStorage.removeItem('autoSortScenery')
+    }
+  }
+
   function setXplanePath(path: string) {
     xplanePath.value = path
     localStorage.setItem('xplanePath', path)
@@ -211,6 +225,11 @@ export const useAppStore = defineStore('app', () => {
   function toggleDeleteSourceAfterInstall() {
     deleteSourceAfterInstall.value = !deleteSourceAfterInstall.value
     localStorage.setItem('deleteSourceAfterInstall', JSON.stringify(deleteSourceAfterInstall.value))
+  }
+
+  function toggleAutoSortScenery() {
+    autoSortScenery.value = !autoSortScenery.value
+    localStorage.setItem('autoSortScenery', JSON.stringify(autoSortScenery.value))
   }
 
   function setLogLevel(level: LogLevel) {
@@ -399,6 +418,7 @@ export const useAppStore = defineStore('app', () => {
     verificationPreferences,
     atomicInstallEnabled,
     deleteSourceAfterInstall,
+    autoSortScenery,
     logLevel,
     overwriteSettings,
     sizeConfirmations,
@@ -417,6 +437,7 @@ export const useAppStore = defineStore('app', () => {
     toggleVerificationPreference,
     toggleAtomicInstall,
     toggleDeleteSourceAfterInstall,
+    toggleAutoSortScenery,
     setLogLevel,
     setCurrentTasks,
     clearTasks,

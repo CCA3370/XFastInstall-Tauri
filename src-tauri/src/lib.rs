@@ -8,6 +8,9 @@ mod models;
 mod performance;
 mod registry;
 mod scanner;
+mod scenery_classifier;
+mod scenery_index;
+mod scenery_packs_manager;
 mod task_control;
 mod updater;
 mod verifier;
@@ -16,7 +19,9 @@ use std::collections::HashMap;
 
 use analyzer::Analyzer;
 use installer::Installer;
-use models::{AnalysisResult, InstallResult, InstallTask};
+use models::{AnalysisResult, InstallResult, InstallTask, SceneryIndexStats, SceneryManagerData, SceneryPackageInfo};
+use scenery_index::SceneryIndexManager;
+use scenery_packs_manager::SceneryPacksManager;
 use task_control::TaskControl;
 
 use tauri::{Emitter, Manager, State};
@@ -67,6 +72,7 @@ async fn install_addons(
     atomic_install_enabled: Option<bool>,
     xplane_path: String,
     delete_source_after_install: Option<bool>,
+    auto_sort_scenery: Option<bool>,
 ) -> Result<InstallResult, String> {
     // Clone app_handle for the blocking task
     let app_handle_clone = app_handle.clone();
@@ -77,7 +83,7 @@ async fn install_addons(
 
         let installer = Installer::new(app_handle_clone);
         installer
-            .install(tasks, atomic_install_enabled.unwrap_or(false), xplane_path, delete_source_after_install.unwrap_or(false))
+            .install(tasks, atomic_install_enabled.unwrap_or(false), xplane_path, delete_source_after_install.unwrap_or(false), auto_sort_scenery.unwrap_or(false))
             .map_err(|e| format!("Installation failed: {}", e))
     })
     .await
@@ -175,8 +181,56 @@ fn open_log_folder() -> Result<(), String> {
 }
 
 #[tauri::command]
+fn open_scenery_folder(xplane_path: String, folder_name: String) -> Result<(), String> {
+    let scenery_path = std::path::PathBuf::from(&xplane_path)
+        .join("Custom Scenery")
+        .join(&folder_name);
+
+    if !scenery_path.exists() {
+        return Err(format!("Scenery folder not found: {}", folder_name));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(scenery_path)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(scenery_path)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(scenery_path)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
 fn set_log_locale(locale: String) {
     logger::set_locale(&locale);
+}
+
+#[tauri::command]
+fn set_log_level(level: String) {
+    let log_level = match level.to_lowercase().as_str() {
+        "debug" => logger::LogLevel::Debug,
+        "info" => logger::LogLevel::Info,
+        "error" => logger::LogLevel::Error,
+        _ => logger::LogLevel::Info, // Default to Info
+    };
+    logger::set_log_level(log_level);
 }
 
 #[tauri::command]
@@ -220,6 +274,168 @@ async fn check_for_updates(manual: bool, include_pre_release: bool) -> Result<up
 #[tauri::command]
 fn get_last_check_time() -> Option<i64> {
     updater::get_last_check_time()
+}
+
+// ========== Scenery Auto-Sorting Commands ==========
+
+#[tauri::command]
+async fn get_scenery_classification(
+    xplane_path: String,
+    folder_name: String,
+) -> Result<SceneryPackageInfo, String> {
+    tokio::task::spawn_blocking(move || {
+        let xplane_path = std::path::Path::new(&xplane_path);
+        let scenery_path = xplane_path.join("Custom Scenery").join(&folder_name);
+
+        if !scenery_path.exists() {
+            return Err(format!("Scenery folder not found: {}", folder_name));
+        }
+
+        let index_manager = SceneryIndexManager::new(xplane_path);
+        index_manager
+            .get_or_classify(&scenery_path)
+            .map_err(|e| format!("Classification failed: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+#[tauri::command]
+async fn sort_scenery_packs(xplane_path: String) -> Result<bool, String> {
+    tokio::task::spawn_blocking(move || {
+        let xplane_path = std::path::Path::new(&xplane_path);
+        let index_manager = SceneryIndexManager::new(xplane_path);
+
+        logger::log_info("Resetting scenery index sort order", Some("scenery"));
+
+        let has_changes = index_manager
+            .reset_sort_order()
+            .map_err(|e| format!("Failed to reset sort order: {}", e))?;
+
+        logger::log_info("Scenery index sort order reset successfully", Some("scenery"));
+        Ok(has_changes)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+#[tauri::command]
+async fn rebuild_scenery_index(xplane_path: String) -> Result<SceneryIndexStats, String> {
+    tokio::task::spawn_blocking(move || {
+        let xplane_path = std::path::Path::new(&xplane_path);
+        let index_manager = SceneryIndexManager::new(xplane_path);
+
+        logger::log_info("Rebuilding scenery index", Some("scenery"));
+
+        index_manager
+            .rebuild_index()
+            .map_err(|e| format!("Failed to rebuild index: {}", e))?;
+
+        index_manager
+            .get_stats()
+            .map_err(|e| format!("Failed to get stats: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+#[tauri::command]
+async fn get_scenery_index_stats(xplane_path: String) -> Result<SceneryIndexStats, String> {
+    tokio::task::spawn_blocking(move || {
+        let xplane_path = std::path::Path::new(&xplane_path);
+        let index_manager = SceneryIndexManager::new(xplane_path);
+
+        index_manager
+            .get_stats()
+            .map_err(|e| format!("Failed to get stats: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+#[tauri::command]
+async fn sync_scenery_packs_with_folder(xplane_path: String) -> Result<usize, String> {
+    tokio::task::spawn_blocking(move || {
+        let xplane_path = std::path::Path::new(&xplane_path);
+        let manager = SceneryPacksManager::new(xplane_path);
+
+        manager
+            .sync_with_folder()
+            .map_err(|e| format!("Failed to sync scenery packs: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+#[tauri::command]
+async fn get_scenery_manager_data(xplane_path: String) -> Result<SceneryManagerData, String> {
+    tokio::task::spawn_blocking(move || {
+        let xplane_path = std::path::Path::new(&xplane_path);
+        let index_manager = SceneryIndexManager::new(xplane_path);
+
+        index_manager
+            .get_manager_data()
+            .map_err(|e| format!("Failed to get scenery manager data: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+#[tauri::command]
+async fn update_scenery_entry(
+    xplane_path: String,
+    folder_name: String,
+    enabled: Option<bool>,
+    sort_order: Option<u32>,
+    category: Option<models::SceneryCategory>,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let xplane_path = std::path::Path::new(&xplane_path);
+        let index_manager = SceneryIndexManager::new(xplane_path);
+
+        index_manager
+            .update_entry(&folder_name, enabled, sort_order, category)
+            .map_err(|e| format!("Failed to update scenery entry: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+#[tauri::command]
+async fn move_scenery_entry(
+    xplane_path: String,
+    folder_name: String,
+    new_sort_order: u32,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let xplane_path = std::path::Path::new(&xplane_path);
+        let index_manager = SceneryIndexManager::new(xplane_path);
+
+        index_manager
+            .move_entry(&folder_name, new_sort_order)
+            .map_err(|e| format!("Failed to move scenery entry: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+#[tauri::command]
+async fn apply_scenery_changes(xplane_path: String) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let xplane_path = std::path::Path::new(&xplane_path);
+        let manager = SceneryPacksManager::new(xplane_path);
+
+        logger::log_info("Applying scenery changes to ini", Some("scenery"));
+
+        manager
+            .apply_from_index()
+            .map_err(|e| format!("Failed to apply scenery changes: {}", e))?;
+
+        logger::log_info("Scenery changes applied successfully", Some("scenery"));
+        Ok(())
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -268,11 +484,24 @@ pub fn run() {
             get_log_path,
             get_all_logs,
             open_log_folder,
+            open_scenery_folder,
             set_log_locale,
+            set_log_level,
             check_path_exists,
             validate_xplane_path,
             check_for_updates,
-            get_last_check_time
+            get_last_check_time,
+            // Scenery auto-sorting commands
+            get_scenery_classification,
+            sort_scenery_packs,
+            rebuild_scenery_index,
+            get_scenery_index_stats,
+            sync_scenery_packs_with_folder,
+            // Scenery manager commands
+            get_scenery_manager_data,
+            update_scenery_entry,
+            move_scenery_entry,
+            apply_scenery_changes
         ])
         .setup(|app| {
             // Initialize TaskControl state

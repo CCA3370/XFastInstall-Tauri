@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::time::SystemTime;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "PascalCase")]
@@ -255,4 +256,172 @@ pub struct VerificationStats {
 /// Default value for enable_verification
 fn default_true() -> bool {
     true
+}
+
+// ========== Scenery Auto-Sorting Data Structures ==========
+
+/// Scenery classification categories for sorting
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "PascalCase")]
+pub enum SceneryCategory {
+    /// Fixed high priority scenery (e.g., SAM libraries)
+    FixedHighPriority,
+    /// Airport scenery with apt.dat
+    Airport,
+    /// Default X-Plane airports (*GLOBAL_AIRPORTS*)
+    DefaultAirport,
+    /// Library scenery (library.txt without Earth nav data)
+    Library,
+    /// Overlay scenery (modifies default terrain/objects)
+    Overlay,
+    /// Orthophoto scenery
+    Orthophotos,
+    /// Mesh scenery (terrain replacement)
+    Mesh,
+    /// Other/unknown scenery
+    Other,
+}
+
+impl SceneryCategory {
+    /// Get sorting priority (lower = higher priority)
+    pub fn priority(&self) -> u8 {
+        match self {
+            SceneryCategory::FixedHighPriority => 0,
+            SceneryCategory::Airport => 1,
+            SceneryCategory::DefaultAirport => 2,
+            SceneryCategory::Library => 3,
+            SceneryCategory::Other => 4,
+            SceneryCategory::Overlay => 5,
+            SceneryCategory::Orthophotos => 6, // Mesh sub-category
+            SceneryCategory::Mesh => 6,        // Same as Orthophotos, use sub-priority to distinguish
+        }
+    }
+}
+
+/// Information about a classified scenery package
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneryPackageInfo {
+    pub folder_name: String,
+    pub category: SceneryCategory,
+    /// Sub-priority within the same category (0 = highest)
+    /// Used for special cases like XPME scenery
+    pub sub_priority: u8,
+    #[serde(with = "systemtime_serde")]
+    pub last_modified: SystemTime,
+    pub has_apt_dat: bool,
+    pub has_dsf: bool,
+    pub has_library_txt: bool,
+    pub has_textures: bool,
+    pub has_objects: bool,
+    pub texture_count: usize,
+    /// Number of 10-degree tile folders under Earth nav data (e.g., "+30+110")
+    #[serde(default)]
+    pub earth_nav_tile_count: u32,
+    #[serde(with = "systemtime_serde")]
+    pub indexed_at: SystemTime,
+    pub required_libraries: Vec<String>,
+    pub missing_libraries: Vec<String>,
+    /// Library names exported by this package (from library.txt EXPORT lines)
+    /// Only populated for Library category scenery packages
+    #[serde(default)]
+    pub exported_library_names: Vec<String>,
+    /// Whether this scenery package is enabled in scenery_packs.ini
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Sort order in scenery_packs.ini (lower = higher priority)
+    #[serde(default)]
+    pub sort_order: u32,
+}
+
+/// DSF file header information
+#[derive(Debug, Clone)]
+pub struct DsfHeader {
+    pub is_overlay: bool,
+    pub airport_icao: Option<String>,
+    pub creation_agent: Option<String>,
+    pub has_exclusions: bool,
+    pub requires_agpoint: bool,
+    pub requires_object: bool,
+    pub object_references: Vec<String>,
+    pub terrain_references: Vec<String>,
+}
+
+/// Entry in scenery_packs.ini
+#[derive(Debug, Clone)]
+pub struct SceneryPackEntry {
+    /// true = SCENERY_PACK, false = SCENERY_PACK_DISABLED
+    pub enabled: bool,
+    /// Path relative to X-Plane root (e.g., "Custom Scenery/folder1/")
+    pub path: String,
+    /// Special marker for *GLOBAL_AIRPORTS*
+    pub is_global_airports: bool,
+}
+
+/// Persistent index of scenery classifications
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SceneryIndex {
+    pub version: u32,
+    pub packages: HashMap<String, SceneryPackageInfo>,
+    #[serde(with = "systemtime_serde")]
+    pub last_updated: SystemTime,
+}
+
+/// Statistics about scenery index
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneryIndexStats {
+    pub total_packages: usize,
+    pub by_category: HashMap<String, usize>,
+    #[serde(with = "systemtime_serde")]
+    pub last_updated: SystemTime,
+}
+
+/// Entry for scenery manager UI
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneryManagerEntry {
+    pub folder_name: String,
+    pub category: SceneryCategory,
+    pub sub_priority: u8,
+    pub enabled: bool,
+    pub sort_order: u32,
+    pub missing_libraries: Vec<String>,
+    pub required_libraries: Vec<String>,
+}
+
+/// Data for scenery manager UI
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneryManagerData {
+    pub entries: Vec<SceneryManagerEntry>,
+    pub total_count: usize,
+    pub enabled_count: usize,
+    pub missing_deps_count: usize,
+    /// Whether the index differs from the ini file and needs to be synced
+    pub needs_sync: bool,
+}
+
+// SystemTime serialization helper
+mod systemtime_serde {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    pub fn serialize<S>(time: &SystemTime, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let duration = time
+            .duration_since(UNIX_EPOCH)
+            .map_err(serde::ser::Error::custom)?;
+        duration.as_secs().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<SystemTime, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let secs = u64::deserialize(deserializer)?;
+        Ok(UNIX_EPOCH + std::time::Duration::from_secs(secs))
+    }
 }

@@ -321,7 +321,7 @@ impl Installer {
     }
 
     /// Install a list of tasks with progress reporting
-    pub fn install(&self, tasks: Vec<InstallTask>, atomic_install_enabled: bool, xplane_path: String, delete_source_after_install: bool) -> Result<InstallResult> {
+    pub fn install(&self, tasks: Vec<InstallTask>, atomic_install_enabled: bool, xplane_path: String, delete_source_after_install: bool, auto_sort_scenery: bool) -> Result<InstallResult> {
         let install_start = Instant::now();
         crate::log_debug!(
             &format!("[TIMING] Installation started: {} tasks (atomic: {})", tasks.len(), atomic_install_enabled),
@@ -503,6 +503,43 @@ impl Installer {
                                             &format!("Failed to delete source file {}: {}", original_path, e),
                                             Some("installer"),
                                         );
+                                    }
+                                }
+                            }
+
+                            // Auto-sort scenery if enabled and this is a scenery task
+                            if auto_sort_scenery && (task.addon_type == AddonType::Scenery || task.addon_type == AddonType::SceneryLibrary) {
+                                use crate::scenery_classifier::classify_scenery;
+                                use crate::scenery_packs_manager::SceneryPacksManager;
+                                use std::path::Path;
+
+                                // Extract folder name from target path
+                                let target_path = Path::new(&task.target_path);
+                                if let Some(folder_name) = target_path.file_name().and_then(|n| n.to_str()) {
+                                    // Classify the newly installed scenery
+                                    let xplane_path_buf = PathBuf::from(&xplane_path);
+                                    match classify_scenery(target_path, &xplane_path_buf) {
+                                        Ok(scenery_info) => {
+                                            // Add entry to scenery_packs.ini at correct position
+                                            let manager = SceneryPacksManager::new(&xplane_path_buf);
+                                            if let Err(e) = manager.add_entry(folder_name, &scenery_info.category) {
+                                                logger::log_error(
+                                                    &format!("Failed to add scenery to scenery_packs.ini: {}", e),
+                                                    Some("installer"),
+                                                );
+                                            } else {
+                                                logger::log_info(
+                                                    &format!("Added {} to scenery_packs.ini (category: {:?})", folder_name, scenery_info.category),
+                                                    Some("installer"),
+                                                );
+                                            }
+                                        }
+                                        Err(e) => {
+                                            logger::log_error(
+                                                &format!("Failed to classify scenery {}: {}", folder_name, e),
+                                                Some("installer"),
+                                            );
+                                        }
                                     }
                                 }
                             }
