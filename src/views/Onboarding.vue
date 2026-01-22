@@ -1,19 +1,16 @@
 <template>
-  <div class="h-full flex flex-col px-8 py-5 relative">
-    <div class="absolute top-4 right-4 flex items-center gap-2">
-      <ThemeSwitcher />
-      <LanguageSwitcher />
-    </div>
-    <div class="flex-1 flex items-center justify-center">
+  <div class="h-full flex flex-col px-8 py-5 relative overflow-x-hidden">
+    <div class="flex-1 flex items-center justify-center overflow-x-hidden">
       <div class="w-full max-w-2xl flex flex-col min-h-[440px]">
         <div class="text-center mb-6">
           <h2 class="text-xl font-bold text-gray-900 dark:text-white">{{ $t('onboarding.title') }}</h2>
           <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ $t('onboarding.subtitle') }}</p>
         </div>
 
-        <div class="h-[300px] overflow-y-auto">
-          <Transition :name="transitionName" mode="out-in">
-            <div :key="currentStep.key" class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md p-5">
+        <div class="h-[300px] overflow-y-auto overflow-x-hidden onboarding-step-shell">
+          <div class="overflow-x-hidden">
+            <Transition :name="transitionName" mode="out-in">
+              <div :key="currentStep.key" class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md p-5">
               <div class="flex items-start justify-between gap-4">
                 <div class="flex-1">
                   <h3 class="text-sm font-semibold text-gray-900 dark:text-white flex items-center gap-2">
@@ -101,6 +98,47 @@
                     </button>
                   </div>
                 </div>
+              </div>
+
+              <div v-if="currentStep.key === 'aircraftBackup'" class="mt-4 space-y-3">
+                <label class="text-xs font-medium text-gray-700 dark:text-gray-300">
+                  {{ $t('settings.configFilePatterns') }}
+                </label>
+                <div class="space-y-1.5">
+                  <div v-for="(_pattern, index) in configPatterns" :key="index">
+                    <div
+                      class="flex items-center gap-2 p-2 bg-gray-50 dark:bg-gray-900/30 rounded-lg border transition-colors"
+                      :class="patternErrors[index] ? 'border-red-300 dark:border-red-500/50' : 'border-gray-100 dark:border-white/5'"
+                    >
+                      <input
+                        v-model="configPatterns[index]"
+                        type="text"
+                        class="flex-1 px-2 py-1 text-xs bg-white dark:bg-gray-800 border rounded text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-colors"
+                        :class="patternErrors[index] ? 'border-red-300 dark:border-red-500' : 'border-gray-200 dark:border-gray-700'"
+                        placeholder="*_prefs.txt"
+                        @blur="handlePatternBlur"
+                      >
+                      <button
+                        @click="removePattern(index)"
+                        class="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded transition-colors"
+                        :title="$t('common.delete')"
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                      </button>
+                    </div>
+                    <p v-if="patternErrors[index]" class="mt-0.5 ml-2 text-xs text-red-500 dark:text-red-400">
+                      {{ patternErrors[index] }}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  @click="addPattern"
+                  class="px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-xs"
+                >
+                  {{ $t('settings.addPattern') }}
+                </button>
               </div>
 
               <div v-if="currentStep.key === 'verificationPreferences'" class="mt-4 space-y-3">
@@ -191,8 +229,9 @@
               <p v-if="currentStep.noteKey && currentStep.key !== 'verificationPreferences'" class="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 p-2 rounded-lg border border-amber-200 dark:border-amber-500/20 mt-4">
                 {{ $t(currentStep.noteKey) }}
               </p>
-            </div>
-          </Transition>
+              </div>
+            </Transition>
+          </div>
         </div>
 
         <div class="mt-4 flex items-center justify-between">
@@ -204,7 +243,7 @@
               v-if="currentIndex > 0"
               @click="prevStep"
               :disabled="isSubmitting"
-              class="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm"
+              class="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm select-none"
             >
               {{ $t('onboarding.back') }}
             </button>
@@ -212,7 +251,7 @@
               v-if="!isLastStep"
               @click="nextStep"
               :disabled="isSubmitting || !canProceed"
-              class="px-3 py-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+              class="px-3 py-1.5 rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm select-none"
             >
               {{ $t('onboarding.next') }}
             </button>
@@ -220,7 +259,7 @@
               v-else
               @click="finishOnboarding"
               :disabled="isSubmitting"
-              class="px-3 py-1.5 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm"
+              class="px-3 py-1.5 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm select-none"
             >
               {{ $t('onboarding.finish') }}
             </button>
@@ -241,8 +280,6 @@ import { useModalStore } from '@/stores/modal'
 import { useToastStore } from '@/stores/toast'
 import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
-import ThemeSwitcher from '@/components/ThemeSwitcher.vue'
-import LanguageSwitcher from '@/components/LanguageSwitcher.vue'
 import { AddonType } from '@/types'
 
 const { t } = useI18n()
@@ -266,6 +303,8 @@ const xplanePathValid = ref(!!store.xplanePath)
 const installPreferences = ref({ ...store.installPreferences })
 const verificationEnabled = ref(Object.values(store.verificationPreferences).some(Boolean))
 const verificationPreferences = ref({ ...store.verificationPreferences, rar: false })
+const configPatterns = ref<string[]>([...store.getConfigFilePatterns()])
+const patternErrors = ref<Record<number, string>>({})
 
 const addonTypes = [AddonType.Aircraft, AddonType.Scenery, AddonType.SceneryLibrary, AddonType.Plugin, AddonType.Navdata]
 const verificationTypes = ['zip', '7z', 'rar', 'directory']
@@ -355,6 +394,16 @@ const steps = computed(() => {
   })
 
   items.push({
+    key: 'aircraftBackup',
+    titleKey: 'settings.aircraftBackup',
+    descKey: 'settings.aircraftBackupDesc',
+    onClass: 'bg-blue-500',
+    disabled: false,
+    isEnabled: () => true,
+    toggle: () => {}
+  })
+
+  items.push({
     key: 'verificationPreferences',
     titleKey: 'settings.verificationPreferences',
     descKey: 'settings.verificationPreferencesDesc',
@@ -412,6 +461,66 @@ const isLastStep = computed(() => currentIndex.value === steps.value.length - 1)
 function toggleCurrent() {
   if (currentStep.value.disabled) return
   currentStep.value.toggle()
+}
+
+function validateGlobPattern(pattern: string): string | null {
+  if (!pattern || pattern.trim() === '') {
+    return null
+  }
+
+  let bracketDepth = 0
+  let braceDepth = 0
+
+  for (let i = 0; i < pattern.length; i++) {
+    const char = pattern[i]
+    const prevChar = i > 0 ? pattern[i - 1] : ''
+
+    if (prevChar === '\\') continue
+
+    if (char === '[') bracketDepth++
+    if (char === ']') bracketDepth--
+    if (char === '{') braceDepth++
+    if (char === '}') braceDepth--
+
+    if (bracketDepth < 0) return t('settings.patternUnbalancedBracket')
+    if (braceDepth < 0) return t('settings.patternUnbalancedBrace')
+  }
+
+  if (bracketDepth !== 0) return t('settings.patternUnbalancedBracket')
+  if (braceDepth !== 0) return t('settings.patternUnbalancedBrace')
+
+  if (pattern.includes('//')) return t('settings.patternInvalidSlash')
+
+  return null
+}
+
+function handlePatternBlur() {
+  const errors: Record<number, string> = {}
+  const validPatterns: string[] = []
+
+  configPatterns.value.forEach((pattern, index) => {
+    const trimmed = pattern.trim()
+    if (trimmed === '') return
+
+    const error = validateGlobPattern(trimmed)
+    if (error) {
+      errors[index] = error
+    } else {
+      validPatterns.push(trimmed)
+    }
+  })
+
+  patternErrors.value = errors
+  store.setConfigFilePatterns(validPatterns)
+}
+
+function addPattern() {
+  configPatterns.value.push('')
+}
+
+function removePattern(index: number) {
+  configPatterns.value.splice(index, 1)
+  handlePatternBlur()
 }
 
 async function validateXplanePath(path: string): Promise<boolean> {
@@ -595,6 +704,9 @@ async function finishOnboarding() {
 </script>
 
 <style scoped>
+.onboarding-step-shell {
+  overflow-x: hidden;
+}
 .onboarding-slide-left-enter-active,
 .onboarding-slide-left-leave-active,
 .onboarding-slide-right-enter-active,

@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Plugin detection for "Other" category classification
 
 - **Persistent Scenery Index** - Fast caching system for scenery metadata
-  - Stored at %LOCALAPPDATA%/XFastInstall/scenery_index.json (Windows)
+  - Stored at %LOCALAPPDATA%/XFast Manager/scenery_index.json (Windows)
   - Automatic cache invalidation based on directory modification time
   - Parallel scanning with rayon for large scenery collections
   - Tracks: category, sub-priority, file counts, library dependencies, tile coverage
@@ -332,7 +332,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🎉 Initial Release
 
-XFastInstall is a modern, intelligent X-Plane addon installer that makes installing aircraft, scenery, plugins, and navigation data effortless.
+XFast Manager is a modern, intelligent X-Plane addon installer that makes installing aircraft, scenery, plugins, and navigation data effortless.
 
 ---
 
@@ -521,7 +521,7 @@ Comprehensive task information before installation:
   - Basic: Errors and warnings only
   - Full: Includes info messages
   - Debug: Verbose debugging information
-- **Log Location**: `%LOCALAPPDATA%/XFastInstall/logs/xfastinstall.log` (Windows)
+- **Log Location**: `%LOCALAPPDATA%/XFast Manager/logs/xfastmanager.log` (Windows)
 - **Frontend Integration** - Frontend logs sent to backend
 
 #### 🔧 Log Management
@@ -639,5 +639,5 @@ Comprehensive task information before installation:
 - **Keyboard Shortcuts** - Quick access to common actions
 - **Persistent Settings** - All preferences saved automatically
 
-[unreleased]: https://github.com/CCA3370/XFastInstall-Tauri/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/CCA3370/XFastInstall-Tauri/releases/tag/v0.1.0
+[unreleased]: https://github.com/CCA3370/XFast-Manager-Tauri/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/CCA3370/XFast-Manager-Tauri/releases/tag/v0.1.0

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-XFastInstall is a cross-platform X-Plane addon installer built with Tauri 2, Rust, and Vue 3. It provides intelligent detection and installation of Aircraft, Scenery, Plugins, and Navdata addons through drag-and-drop or Windows context menu integration.
+XFast Manager is a cross-platform X-Plane addon installer built with Tauri 2, Rust, and Vue 3. It provides intelligent detection and installation of Aircraft, Scenery, Plugins, and Navdata addons through drag-and-drop or Windows context menu integration.
 
 ## Prerequisites
 
@@ -149,7 +149,7 @@ The backend follows a modular pipeline architecture:
 - **logger.rs**: Logging system with i18n support
   - Thread-safe file logging with automatic rotation (3MB max, trims to 2MB)
   - Bilingual support (English/Chinese) with locale switching
-  - Log location: `%LOCALAPPDATA%/XFastInstall/logs/xfastinstall.log` (Windows)
+  - Log location: `%LOCALAPPDATA%/XFast Manager/logs/xfastmanager.log` (Windows)
   - Provides log reading and folder opening functionality
 
 ### Frontend Structure

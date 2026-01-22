@@ -1,5 +1,5 @@
 <template>
-  <div class="home-view h-full flex flex-col p-6 animate-fade-in relative overflow-hidden">
+  <div class="home-view h-full flex flex-col p-6 animate-fade-in relative overflow-hidden select-none">
     <!-- Background Decor (Dark Mode Only for deep glow) -->
     <div class="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0 opacity-0 dark:opacity-100 transition-opacity duration-500">
       <div class="absolute top-1/4 left-1/4 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl"></div>

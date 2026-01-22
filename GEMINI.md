@@ -1,8 +1,8 @@
-# XFastInstall-Tauri
+# XFast-Manager-Tauri
 
 ## Project Overview
 
-**XFastInstall** is a modern, cross-platform installer for X-Plane addons, built with **Tauri 2**, **Rust**, and **Vue 3**. It features a drag-and-drop interface, intelligent addon detection (Aircraft, Scenery, Plugins, Navdata), archive support (.zip, .7z), and Windows context menu integration.
+**XFast Manager** is a modern, cross-platform installer for X-Plane addons, built with **Tauri 2**, **Rust**, and **Vue 3**. It features a drag-and-drop interface, intelligent addon detection (Aircraft, Scenery, Plugins, Navdata), archive support (.zip, .7z), and Windows context menu integration.
 
 ### Tech Stack
 

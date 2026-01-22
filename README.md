@@ -1,10 +1,10 @@
-# XFastInstall
+# XFast Manager
 
 **一键安装 X-Plane 插件的现代化工具 | Modern X-Plane Addon Installer**
 
-XFastInstall 是一款专为 X-Plane 飞行模拟器设计的智能插件安装工具，支持 Windows、macOS 和 Linux 平台。告别手动解压和复制文件的繁琐操作，只需拖放即可完成安装。
+XFast Manager 是一款专为 X-Plane 飞行模拟器设计的智能插件安装工具，支持 Windows、macOS 和 Linux 平台。告别手动解压和复制文件的繁琐操作，只需拖放即可完成安装。
 
-XFastInstall is an intelligent addon installer designed for X-Plane flight simulator, supporting Windows, macOS, and Linux. Say goodbye to manual extraction and file copying - just drag and drop to install.
+XFast Manager is an intelligent addon installer designed for X-Plane flight simulator, supporting Windows, macOS, and Linux. Say goodbye to manual extraction and file copying - just drag and drop to install.
 
 ---
 
@@ -116,11 +116,11 @@ Aviation-themed modern design:
 
 ### 下载安装 | Download & Install
 
-1. 前往 [Releases](https://github.com/yourusername/XFastInstall-Tauri/releases) 页面下载最新版本
+1. 前往 [Releases](https://github.com/yourusername/XFast-Manager-Tauri/releases) 页面下载最新版本
 2. 运行安装程序
 3. 首次启动时，在设置中配置 X-Plane 安装路径
 
-1. Go to [Releases](https://github.com/yourusername/XFastInstall-Tauri/releases) to download the latest version
+1. Go to [Releases](https://github.com/yourusername/XFast-Manager-Tauri/releases) to download the latest version
 2. Run the installer
 3. On first launch, configure your X-Plane installation path in Settings
 

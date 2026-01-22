@@ -2,7 +2,7 @@
 
 ## ✅ Now Supports Both!
 
-XFastInstall now supports **both** Windows shortcuts (.lnk files) and symbolic links!
+XFast Manager now supports **both** Windows shortcuts (.lnk files) and symbolic links!
 
 ### Windows Shortcuts (.lnk) - ✅ SUPPORTED
 
@@ -11,13 +11,13 @@ The easiest way to link scenery on Windows:
 1. Right-click on the scenery folder you want to link
 2. Select "Create shortcut"
 3. Move the shortcut to `Custom Scenery` folder
-4. XFastInstall will automatically resolve the shortcut and scan the target folder
+4. XFast Manager will automatically resolve the shortcut and scan the target folder
 
 **Example:**
 - Original scenery: `D:\MyScenery\KSEA_Seattle`
 - Create shortcut: Right-click → "Create shortcut"
 - Move to: `F:\X-Plane 12\Custom Scenery\KSEA_Seattle.lnk`
-- XFastInstall will automatically find and classify the scenery at `D:\MyScenery\KSEA_Seattle`
+- XFast Manager will automatically find and classify the scenery at `D:\MyScenery\KSEA_Seattle`
 
 ### Symbolic Links - ✅ ALSO SUPPORTED
 
@@ -52,7 +52,7 @@ mklink /D "KSEA_Airport" "D:\MyScenery\KSEA_Seattle"
 
 ## Verification
 
-After creating a shortcut or symlink, XFastInstall will:
+After creating a shortcut or symlink, XFast Manager will:
 - Automatically detect and resolve the link
 - Log the resolution in info logs: `"Resolved shortcut XPME_Africa.lnk -> D:\Scenery\XPME_Africa"`
 - Scan the target directory and classify the scenery
@@ -62,7 +62,7 @@ After creating a shortcut or symlink, XFastInstall will:
 
 ### Shortcuts Not Working?
 
-1. **Check the log file** (`%LOCALAPPDATA%\XFastInstall\logs\xfastinstall.log`):
+1. **Check the log file** (`%LOCALAPPDATA%\XFast Manager\logs\xfastmanager.log`):
    - Look for "Resolved shortcut" messages
    - Look for "Failed to resolve shortcut" errors
 
@@ -83,7 +83,7 @@ After creating a shortcut or symlink, XFastInstall will:
    - Symlinks will show `<SYMLINK>` or `<SYMLINKD>` in the listing
 
 2. **Check debug logs**:
-   - Enable debug mode in XFastInstall
+   - Enable debug mode in XFast Manager
    - Look for "This is a symlink pointing to:" messages
    - Verify the target path is correct
 

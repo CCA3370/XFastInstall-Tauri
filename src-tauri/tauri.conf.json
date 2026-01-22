@@ -1,7 +1,7 @@
 {
-  "productName": "XFastInstall",
+  "productName": "XFast Manager",
   "version": "0.5.0",
-  "identifier": "com.xfastinstall.app",
+  "identifier": "com.xfastmanager.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "XFastInstall - X-Plane Addon Installer",
+        "title": "XFast Manager - X-Plane Addon Installer",
         "width": 700,
         "height": 600,
         "minWidth": 650,

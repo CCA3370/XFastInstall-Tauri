@@ -963,10 +963,10 @@
       <section class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300">
         <div class="p-4 flex items-center space-x-4">
           <div class="w-12 h-12 rounded-xl shadow-lg transform rotate-3 flex-shrink-0 overflow-hidden">
-            <img src="/icon.png" alt="XFastInstall" class="w-full h-full object-cover" />
+            <img src="/icon.png" alt="XFast Manager" class="w-full h-full object-cover" />
           </div>
           <div>
-            <h3 class="text-base font-bold text-gray-900 dark:text-white">XFastInstall</h3>
+            <h3 class="text-base font-bold text-gray-900 dark:text-white">XFast Manager</h3>
             <p class="text-xs text-gray-500 dark:text-gray-400">
               v{{ appVersion }} • © 2026
             </p>

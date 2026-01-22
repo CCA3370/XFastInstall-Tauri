@@ -1,5 +1,5 @@
 [package]
-name = "xfastinstall"
+name = "xfastmanager"
 version = "0.4.0"
 description = "X-Plane Addon Installer"
 authors = ["3370Tech"]
@@ -45,5 +45,5 @@ lnk = "0.5"
 libc = "0.2"
 
 [lib]
-name = "xfastinstall_lib"
+name = "xfastmanager_lib"
 crate-type = ["lib"]

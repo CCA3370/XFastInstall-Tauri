@@ -55,7 +55,7 @@ impl LogMsg {
     pub fn translate(&self, locale: Locale) -> &'static str {
         match locale {
             Locale::En => match self {
-                LogMsg::AppStarted => "XFastInstall started",
+                LogMsg::AppStarted => "XFast Manager started",
                 LogMsg::LaunchedWithArgs => "Launched with arguments",
                 LogMsg::InstallationStarted => "Installation started",
                 LogMsg::Installing => "Installing",
@@ -67,7 +67,7 @@ impl LogMsg {
                 LogMsg::CannotInstallFromXPlane => "Cannot install from X-Plane directory. Please drag files from outside X-Plane folder",
             },
             Locale::Zh => match self {
-                LogMsg::AppStarted => "XFastInstall 已启动",
+                LogMsg::AppStarted => "XFast Manager 已启动",
                 LogMsg::LaunchedWithArgs => "通过参数启动",
                 LogMsg::InstallationStarted => "开始安装",
                 LogMsg::Installing => "正在安装",
@@ -93,7 +93,7 @@ impl LoggerInner {
     fn new() -> Self {
         let log_dir = dirs::data_local_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("XFastInstall")
+            .join("XFast Manager")
             .join("logs");
 
         // Create log directory if it doesn't exist
@@ -102,7 +102,7 @@ impl LoggerInner {
         }
 
         Self {
-            log_path: log_dir.join("xfastinstall.log"),
+            log_path: log_dir.join("xfastmanager.log"),
             locale: Locale::default(),
             is_first_log: true,
             min_level: LogLevel::Info, // Default to Info level

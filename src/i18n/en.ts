@@ -199,7 +199,7 @@ export default {
     pathRequired: 'Please set X-Plane path in Settings first'
   },
   log: {
-    appStarted: 'XFastInstall started',
+    appStarted: 'XFast Manager started',
     launchedWithArgs: 'Launched with arguments',
     filesDropped: 'Files dropped for analysis',
     fileCount: '{count} file(s)',

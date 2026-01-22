@@ -16,21 +16,21 @@ pub fn register_context_menu() -> Result<()> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
     // Register for files (*)
-    let (shell_key, _) = hkcu.create_subkey(r"Software\Classes\*\shell\XFastInstall")?;
+    let (shell_key, _) = hkcu.create_subkey(r"Software\Classes\*\shell\XFast Manager")?;
     shell_key.set_value("", &"Install to X-Plane")?;
     shell_key.set_value("Icon", &exe_path_str.to_string())?;
 
-    let (command_key, _) = hkcu.create_subkey(r"Software\Classes\*\shell\XFastInstall\command")?;
+    let (command_key, _) = hkcu.create_subkey(r"Software\Classes\*\shell\XFast Manager\command")?;
     command_key.set_value("", &format!("\"{}\" \"%1\"", exe_path_str))?;
 
     // Register for directories
     let (dir_shell_key, _) =
-        hkcu.create_subkey(r"Software\Classes\Directory\shell\XFastInstall")?;
+        hkcu.create_subkey(r"Software\Classes\Directory\shell\XFast Manager")?;
     dir_shell_key.set_value("", &"Install to X-Plane")?;
     dir_shell_key.set_value("Icon", &exe_path_str.to_string())?;
 
     let (dir_command_key, _) =
-        hkcu.create_subkey(r"Software\Classes\Directory\shell\XFastInstall\command")?;
+        hkcu.create_subkey(r"Software\Classes\Directory\shell\XFast Manager\command")?;
     dir_command_key.set_value("", &format!("\"{}\" \"%1\"", exe_path_str))?;
 
     Ok(())
@@ -41,10 +41,10 @@ pub fn unregister_context_menu() -> Result<()> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
 
     // Try to delete for files
-    let _ = hkcu.delete_subkey_all(r"Software\Classes\*\shell\XFastInstall");
+    let _ = hkcu.delete_subkey_all(r"Software\Classes\*\shell\XFast Manager");
 
     // Try to delete for directories
-    let _ = hkcu.delete_subkey_all(r"Software\Classes\Directory\shell\XFastInstall");
+    let _ = hkcu.delete_subkey_all(r"Software\Classes\Directory\shell\XFast Manager");
 
     Ok(())
 }
@@ -53,7 +53,7 @@ pub fn unregister_context_menu() -> Result<()> {
 pub fn is_context_menu_registered() -> bool {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     // Check if the registry key exists
-    hkcu.open_subkey(r"Software\Classes\*\shell\XFastInstall")
+    hkcu.open_subkey(r"Software\Classes\*\shell\XFast Manager")
         .is_ok()
 }
 

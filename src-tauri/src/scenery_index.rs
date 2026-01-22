@@ -996,7 +996,7 @@ fn get_index_file_path() -> PathBuf {
     {
         if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
             return PathBuf::from(local_app_data)
-                .join("XFastInstall")
+                .join("XFast Manager")
                 .join("scenery_index.json");
         }
     }
@@ -1007,7 +1007,7 @@ fn get_index_file_path() -> PathBuf {
             return PathBuf::from(home)
                 .join("Library")
                 .join("Application Support")
-                .join("XFastInstall")
+                .join("XFast Manager")
                 .join("scenery_index.json");
         }
     }
@@ -1017,7 +1017,7 @@ fn get_index_file_path() -> PathBuf {
         if let Some(home) = std::env::var_os("HOME") {
             return PathBuf::from(home)
                 .join(".config")
-                .join("xfastinstall")
+                .join("xfastmanager")
                 .join("scenery_index.json");
         }
     }

@@ -3,19 +3,20 @@
   <div class="app-container transition-colors duration-300 text-gray-900 dark:text-gray-100 font-sans selection:bg-blue-500/30">
     
     <!-- Navbar -->
-    <nav v-if="!isOnboardingRoute" class="fixed top-0 left-0 w-full z-50 transition-all duration-300">
+    <nav class="fixed top-0 left-0 w-full z-50 transition-all duration-300">
       <div class="absolute inset-0 bg-white/70 dark:bg-gray-900/70 backdrop-blur-xl border-b border-gray-200/50 dark:border-white/5 shadow-sm dark:shadow-2xl transition-colors duration-300"></div>
       
       <div class="relative container mx-auto px-6 h-12 flex justify-between items-center">
         <!-- Logo -->
         <div class="flex items-center space-x-3 group cursor-default">
           <h1 class="text-lg font-bold tracking-wide">
-            <span class="text-gray-900 dark:text-white transition-colors">XFast</span><span class="text-blue-600 dark:text-blue-400 transition-colors">Install</span>
+            <span class="text-gray-900 dark:text-white transition-colors">XFast</span><span class="text-blue-600 dark:text-blue-400 transition-colors">Manager</span>
           </h1>
         </div>
 
         <!-- Navigation -->
-        <div class="flex items-center space-x-1">
+        <div class="flex items-center space-x-2">
+          <div v-if="!isOnboardingRoute" class="flex items-center space-x-1">
           <router-link
             to="/"
             class="relative px-3 py-2 rounded-lg group overflow-hidden transition-all duration-300"
@@ -86,19 +87,20 @@
               </svg>
             </span>
           </router-link>
-
-          <div class="h-6 w-px bg-gray-200 dark:bg-white/10 mx-2 transition-colors"></div>
-          
-          <div class="flex items-center space-x-1">
-             <ThemeSwitcher />
-             <LanguageSwitcher />
-          </div>
         </div>
+
+        <div class="h-6 w-px bg-gray-200 dark:bg-white/10 transition-colors"></div>
+
+        <div class="flex items-center space-x-1">
+          <ThemeSwitcher />
+          <LanguageSwitcher />
+        </div>
+      </div>
       </div>
     </nav>
 
     <!-- Main Content -->
-    <main :class="['main-content', isOnboardingRoute ? 'pt-0' : 'pt-12', 'flex-1', 'min-h-0', 'overflow-hidden', { 'hide-scrollbar': $route.path === '/' }]">
+    <main :class="['main-content', 'pt-12', 'flex-1', 'min-h-0', 'overflow-hidden', { 'hide-scrollbar': $route.path === '/' }]">
       <div class="h-full overflow-y-auto">
         <router-view v-slot="{ Component }">
           <transition name="page" mode="out-in">

@@ -212,7 +212,7 @@ export default {
     pathRequired: '请先在设置中配置X-Plane路径'
   },
   log: {
-    appStarted: 'XFastInstall 已启动',
+    appStarted: 'XFast Manager 已启动',
     launchedWithArgs: '通过参数启动',
     filesDropped: '文件拖入待分析',
     fileCount: '{count} 个文件',

@@ -38,7 +38,7 @@ impl UpdateChecker {
     pub fn new() -> Self {
         Self {
             repo_owner: "CCA3370".to_string(),
-            repo_name: "XFastInstall-Tauri".to_string(),
+            repo_name: "XFast-Manager-Tauri".to_string(),
             cache_duration: Duration::from_secs(24 * 60 * 60), // 24 hours
         }
     }
@@ -115,7 +115,7 @@ impl UpdateChecker {
 
         // Use tauri-plugin-http to make the request
         let client = reqwest::Client::builder()
-            .user_agent("XFastInstall")
+            .user_agent("XFast Manager")
             .timeout(Duration::from_secs(10))
             .build()
             .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
@@ -267,8 +267,8 @@ impl UpdateChecker {
     fn get_last_check_time(&self) -> Option<u64> {
         // For simplicity, we'll use a file in the app data directory
         let app_dir = dirs::data_local_dir()?;
-        let xfastinstall_dir = app_dir.join("XFastInstall");
-        let cache_file = xfastinstall_dir.join("update_check_cache.txt");
+        let xfastmanager_dir = app_dir.join("XFast Manager");
+        let cache_file = xfastmanager_dir.join("update_check_cache.txt");
 
         if let Ok(content) = std::fs::read_to_string(cache_file) {
             content.trim().parse().ok()
@@ -285,9 +285,9 @@ impl UpdateChecker {
             .as_secs();
 
         if let Some(app_dir) = dirs::data_local_dir() {
-            let xfastinstall_dir = app_dir.join("XFastInstall");
-            let _ = std::fs::create_dir_all(&xfastinstall_dir);
-            let cache_file = xfastinstall_dir.join("update_check_cache.txt");
+            let xfastmanager_dir = app_dir.join("XFast Manager");
+            let _ = std::fs::create_dir_all(&xfastmanager_dir);
+            let cache_file = xfastmanager_dir.join("update_check_cache.txt");
             let _ = std::fs::write(cache_file, now.to_string());
         }
     }

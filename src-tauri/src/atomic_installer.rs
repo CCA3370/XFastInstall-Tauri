@@ -47,7 +47,7 @@ impl AtomicInstaller {
         check_disk_space(xplane_root)?;
 
         // Create temp directory in X-Plane root directory
-        let temp_dir = xplane_root.join(format!(".xfastinstall_temp_{}", Uuid::new_v4()));
+        let temp_dir = xplane_root.join(format!(".xfastmanager_temp_{}", Uuid::new_v4()));
 
         fs::create_dir_all(&temp_dir)
             .context(format!("Failed to create temp directory: {:?}", temp_dir))?;

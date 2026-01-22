@@ -2358,7 +2358,7 @@ impl Installer {
         // Step 1: Backup liveries and config files if requested
         let backup_dir = if (backup_liveries || backup_config_files) && target.exists() {
             let temp_dir = std::env::temp_dir();
-            let backup_path = temp_dir.join(format!("xfastinstall_backup_{}", Uuid::new_v4()));
+            let backup_path = temp_dir.join(format!("xfastmanager_backup_{}", Uuid::new_v4()));
             fs::create_dir_all(&backup_path).context("Failed to create backup directory")?;
 
             // Backup liveries
@@ -2587,7 +2587,7 @@ impl Installer {
 
         // Create temp directory for backup
         let temp_dir =
-            std::env::temp_dir().join(format!("xfastinstall_backup_{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("xfastmanager_backup_{}", uuid::Uuid::new_v4()));
         fs::create_dir_all(&temp_dir)
             .context("Failed to create backup directory - check disk space")?;
 
@@ -3299,7 +3299,7 @@ impl Installer {
 
         // Create secure temp directory using tempfile crate
         let temp_dir = tempfile::Builder::new()
-            .prefix("xfastinstall_7z_")
+            .prefix("xfastmanager_7z_")
             .tempdir()
             .context("Failed to create secure temp directory")?;
 
@@ -3494,7 +3494,7 @@ impl Installer {
     ) -> Result<()> {
         // Create secure temp directory using tempfile crate
         let temp_dir = tempfile::Builder::new()
-            .prefix("xfastinstall_rar_")
+            .prefix("xfastmanager_rar_")
             .tempdir()
             .context("Failed to create secure temp directory")?;
 
