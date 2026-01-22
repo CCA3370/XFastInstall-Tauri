@@ -57,6 +57,8 @@ export const useAppStore = defineStore('app', () => {
 
   // Scenery auto-sorting (default: disabled)
   const autoSortScenery = ref(false)
+  const sceneryManagerHintVisible = ref(false)
+  const sceneryManagerHintMessageKey = ref<string | null>(null)
 
   // Overwrite settings per task (taskId -> shouldOverwrite)
   const overwriteSettings = ref<Record<string, boolean>>({})
@@ -230,6 +232,15 @@ export const useAppStore = defineStore('app', () => {
   function toggleAutoSortScenery() {
     autoSortScenery.value = !autoSortScenery.value
     localStorage.setItem('autoSortScenery', JSON.stringify(autoSortScenery.value))
+  }
+
+  function showSceneryManagerHint(messageKey: string) {
+    sceneryManagerHintMessageKey.value = messageKey
+    sceneryManagerHintVisible.value = true
+  }
+
+  function dismissSceneryManagerHint() {
+    sceneryManagerHintVisible.value = false
   }
 
   function setLogLevel(level: LogLevel) {
@@ -419,6 +430,8 @@ export const useAppStore = defineStore('app', () => {
     atomicInstallEnabled,
     deleteSourceAfterInstall,
     autoSortScenery,
+    sceneryManagerHintVisible,
+    sceneryManagerHintMessageKey,
     logLevel,
     overwriteSettings,
     sizeConfirmations,
@@ -438,6 +451,8 @@ export const useAppStore = defineStore('app', () => {
     toggleAtomicInstall,
     toggleDeleteSourceAfterInstall,
     toggleAutoSortScenery,
+    showSceneryManagerHint,
+    dismissSceneryManagerHint,
     setLogLevel,
     setCurrentTasks,
     clearTasks,

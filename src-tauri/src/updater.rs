@@ -38,7 +38,7 @@ impl UpdateChecker {
     pub fn new() -> Self {
         Self {
             repo_owner: "CCA3370".to_string(),
-            repo_name: "XFastInstall-Tauri".to_string(),
+            repo_name: "XFast-Manager".to_string(),
             cache_duration: Duration::from_secs(24 * 60 * 60), // 24 hours
         }
     }
@@ -105,14 +105,17 @@ impl UpdateChecker {
         include_pre_release: bool,
     ) -> Result<GitHubRelease, String> {
         crate::logger::log_debug(
-            &format!("Fetching releases (include_pre_release: {})", include_pre_release),
+            &format!(
+                "Fetching releases (include_pre_release: {})",
+                include_pre_release
+            ),
             Some("updater"),
             None,
         );
 
         // Use tauri-plugin-http to make the request
         let client = reqwest::Client::builder()
-            .user_agent("XFastInstall")
+            .user_agent("XFast Manager")
             .timeout(Duration::from_secs(10))
             .build()
             .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
@@ -152,7 +155,11 @@ impl UpdateChecker {
                 self.repo_owner, self.repo_name
             );
 
-            crate::logger::log_debug(&format!("Fetching from: {}", latest_url), Some("updater"), None);
+            crate::logger::log_debug(
+                &format!("Fetching from: {}", latest_url),
+                Some("updater"),
+                None,
+            );
 
             let response = client.get(&latest_url).send().await;
 
@@ -195,9 +202,7 @@ impl UpdateChecker {
                         .map_err(|e| format!("Failed to parse releases: {}", e))?;
 
                     // Filter for non-prerelease versions
-                    let stable_release = releases
-                        .into_iter()
-                        .find(|r| !r.prerelease);
+                    let stable_release = releases.into_iter().find(|r| !r.prerelease);
 
                     match stable_release {
                         Some(release) => Ok(release),
@@ -248,10 +253,10 @@ impl UpdateChecker {
             Some(last) => {
                 let now = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
-                    .unwrap()
+                    .unwrap_or_default()
                     .as_secs();
 
-                let elapsed = Duration::from_secs(now - last);
+                let elapsed = Duration::from_secs(now.saturating_sub(last));
                 elapsed >= self.cache_duration
             }
             None => true, // Never checked before
@@ -262,8 +267,8 @@ impl UpdateChecker {
     fn get_last_check_time(&self) -> Option<u64> {
         // For simplicity, we'll use a file in the app data directory
         let app_dir = dirs::data_local_dir()?;
-        let xfastinstall_dir = app_dir.join("XFastInstall");
-        let cache_file = xfastinstall_dir.join("update_check_cache.txt");
+        let xfastmanager_dir = app_dir.join("XFast Manager");
+        let cache_file = xfastmanager_dir.join("update_check_cache.txt");
 
         if let Ok(content) = std::fs::read_to_string(cache_file) {
             content.trim().parse().ok()
@@ -276,13 +281,13 @@ impl UpdateChecker {
     fn update_last_check_time(&self) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .unwrap_or_default()
             .as_secs();
 
         if let Some(app_dir) = dirs::data_local_dir() {
-            let xfastinstall_dir = app_dir.join("XFastInstall");
-            let _ = std::fs::create_dir_all(&xfastinstall_dir);
-            let cache_file = xfastinstall_dir.join("update_check_cache.txt");
+            let xfastmanager_dir = app_dir.join("XFast Manager");
+            let _ = std::fs::create_dir_all(&xfastmanager_dir);
+            let cache_file = xfastmanager_dir.join("update_check_cache.txt");
             let _ = std::fs::write(cache_file, now.to_string());
         }
     }

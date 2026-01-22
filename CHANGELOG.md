@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-01-22
+
+### Added
+
+#### First-Time User Onboarding
+- **Guided Setup Wizard** - New onboarding experience for first-time users
+  - Step-by-step configuration of X-Plane path
+  - Installation preferences setup (addon type toggles)
+  - Context menu registration option (Windows)
+  - Auto-sort scenery preference
+  - Delete source after install preference
+  - Worry-Free installation mode preference
+  - Clean, modern UI with smooth transitions
+
+#### Scenery Index Improvements
+- **Index Status Detection** - Automatically detects if scenery index needs to be created
+  - Shows prompt when index doesn't exist
+  - One-click index creation from home page
+  - Progress feedback during index building
+
+### Changed
+
+- **Project Rebranding** - Renamed from "XFastInstall" to "XFast Manager"
+  - Updated all references throughout the application
+  - New application identifier: com.xfastmanager.app
+  - Updated window title and descriptions
+
+- **Dependency Upgrades**
+  - Upgraded sevenz-rust2 from 0.10 to 0.20 for improved 7z archive handling with safer Rust implementation
+  - Upgraded unrar from 0.5 to 0.5.8 for bug fixes and improved RAR archive handling
+
+- **Code Quality Improvements**
+  - Refactored scenery packs manager for better maintainability
+  - Streamlined entry management and sorting mechanism
+  - Enhanced error handling in updater and task control
+  - Performance optimizations in multiple components
+
 ## [0.5.0] - 2026-01-21
 
 ### Added
@@ -39,7 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Plugin detection for "Other" category classification
 
 - **Persistent Scenery Index** - Fast caching system for scenery metadata
-  - Stored at %LOCALAPPDATA%/XFastInstall/scenery_index.json (Windows)
+  - Stored at %LOCALAPPDATA%/XFast Manager/scenery_index.json (Windows)
   - Automatic cache invalidation based on directory modification time
   - Parallel scanning with rayon for large scenery collections
   - Tracks: category, sub-priority, file counts, library dependencies, tile coverage
@@ -332,7 +369,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🎉 Initial Release
 
-XFastInstall is a modern, intelligent X-Plane addon installer that makes installing aircraft, scenery, plugins, and navigation data effortless.
+XFast Manager is a modern, intelligent X-Plane Addon Auto Manager that makes installing aircraft, scenery, plugins, and navigation data effortless.
 
 ---
 
@@ -521,7 +558,7 @@ Comprehensive task information before installation:
   - Basic: Errors and warnings only
   - Full: Includes info messages
   - Debug: Verbose debugging information
-- **Log Location**: `%LOCALAPPDATA%/XFastInstall/logs/xfastinstall.log` (Windows)
+- **Log Location**: `%LOCALAPPDATA%/XFast Manager/logs/xfastmanager.log` (Windows)
 - **Frontend Integration** - Frontend logs sent to backend
 
 #### 🔧 Log Management
@@ -638,6 +675,3 @@ Comprehensive task information before installation:
 - **Responsive Design** - Adapts to different window sizes
 - **Keyboard Shortcuts** - Quick access to common actions
 - **Persistent Settings** - All preferences saved automatically
-
-[unreleased]: https://github.com/CCA3370/XFastInstall-Tauri/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/CCA3370/XFastInstall-Tauri/releases/tag/v0.1.0

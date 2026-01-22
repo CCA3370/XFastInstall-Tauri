@@ -779,7 +779,7 @@
           <!-- Toggle Switch -->
           <div class="flex items-center space-x-3">
             <button
-              @click.stop="store.toggleAutoSortScenery()"
+              @click.stop="handleToggleAutoSortScenery"
               class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
               :class="store.autoSortScenery ? 'bg-cyan-500' : 'bg-gray-300 dark:bg-gray-600'"
             >
@@ -837,7 +837,7 @@
               @click="handleRebuildIndex"
               :disabled="isRebuildingIndex || !store.xplanePath"
               class="w-full px-4 py-2 bg-gray-500 hover:bg-gray-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors flex items-center justify-center space-x-2"
-              :title="$t('settings.rebuildIndexTooltip')"
+              :title="indexExists ? $t('settings.rebuildIndexTooltip') : $t('settings.createIndexTooltip')"
             >
               <svg v-if="!isRebuildingIndex" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
@@ -846,7 +846,9 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
               </svg>
               <span>
-                <AnimatedText>{{ isRebuildingIndex ? $t('settings.rebuilding') : $t('settings.rebuildIndex') }}</AnimatedText>
+                <AnimatedText>
+                  {{ isRebuildingIndex ? $t('settings.rebuilding') : (indexExists ? $t('settings.rebuildIndex') : $t('settings.createIndex')) }}
+                </AnimatedText>
               </span>
             </button>
 
@@ -961,10 +963,10 @@
       <section class="bg-white/80 dark:bg-gray-800/40 backdrop-blur-md border border-gray-200 dark:border-white/5 rounded-xl shadow-sm dark:shadow-md transition-colors duration-300">
         <div class="p-4 flex items-center space-x-4">
           <div class="w-12 h-12 rounded-xl shadow-lg transform rotate-3 flex-shrink-0 overflow-hidden">
-            <img src="/icon.png" alt="XFastInstall" class="w-full h-full object-cover" />
+            <img src="/icon.png" alt="XFast Manager" class="w-full h-full object-cover" />
           </div>
           <div>
-            <h3 class="text-base font-bold text-gray-900 dark:text-white">XFastInstall</h3>
+            <h3 class="text-base font-bold text-gray-900 dark:text-white">XFast Manager</h3>
             <p class="text-xs text-gray-500 dark:text-gray-400">
               v{{ appVersion }} • © 2026
             </p>
@@ -976,10 +978,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useToastStore } from '@/stores/toast'
 import { useModalStore } from '@/stores/modal'
 import { useAppStore } from '@/stores/app'
+import { useSceneryStore } from '@/stores/scenery'
 import { useUpdateStore } from '@/stores/update'
 import { useI18n } from 'vue-i18n'
 import { invoke } from '@tauri-apps/api/core'
@@ -990,6 +993,7 @@ import { logger } from '@/services/logger'
 
 const { t } = useI18n()
 const store = useAppStore()
+const sceneryStore = useSceneryStore()
 const toast = useToastStore()
 const modal = useModalStore()
 const updateStore = useUpdateStore()
@@ -1020,8 +1024,17 @@ const windowsIntegrationExpanded = ref(false) // Default collapsed
 const patternSaveStatus = ref<'saving' | 'saved' | null>(null)
 const sceneryAutoSortExpanded = ref(false) // Default collapsed
 const isRebuildingIndex = ref(false)
+const indexExists = computed(() => sceneryStore.indexExists)
 
 const addonTypes = [AddonType.Aircraft, AddonType.Scenery, AddonType.SceneryLibrary, AddonType.Plugin, AddonType.Navdata]
+
+onMounted(() => {
+  sceneryStore.loadIndexStatus()
+})
+
+watch(() => store.xplanePath, () => {
+  sceneryStore.loadIndexStatus()
+})
 
 // Scroll log container to bottom
 function scrollLogsToBottom() {
@@ -1045,6 +1058,19 @@ function toggleAllPreferences() {
       store.togglePreference(type)
     }
   })
+}
+
+function handleToggleAutoSortScenery() {
+  const wasEnabled = store.autoSortScenery
+  store.toggleAutoSortScenery()
+
+  if (!wasEnabled && store.autoSortScenery) {
+    const shown = localStorage.getItem('sceneryAutoSortHintShown')
+    if (!shown) {
+      store.showSceneryManagerHint('sceneryManager.hintFromSettings')
+      localStorage.setItem('sceneryAutoSortHintShown', 'true')
+    }
+  }
 }
 
 function getTypeName(type: AddonType): string {
@@ -1384,6 +1410,7 @@ async function handleRebuildIndex() {
   try {
     await invoke('rebuild_scenery_index', { xplanePath: store.xplanePath })
     toast.success(t('settings.indexRebuilt'))
+    await sceneryStore.loadIndexStatus()
   } catch (error) {
     console.error('Failed to rebuild scenery index:', error)
     modal.showError(t('settings.indexRebuildFailed') + ': ' + String(error))

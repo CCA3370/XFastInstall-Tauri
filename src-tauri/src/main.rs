@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    xfastinstall_lib::run();
+    xfastmanager_lib::run();
 }

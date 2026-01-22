@@ -122,15 +122,15 @@ export default {
     experimentalWarning: '⚠️ 这些功能可能导致系统不稳定或性能下降，请根据实际情况测试',
     currentCpuCores: '当前CPU核心数',
     estimatedThreads: '预计使用线程数',
-    atomicInstall: '原子安装模式',
+    atomicInstall: '无忧安装模式',
     atomicInstallDesc: '启用后，安装过程将更加安全可靠',
-    atomicInstallTitle: '原子安装模式',
-    atomicInstallExplain: '原子安装模式说明',
+    atomicInstallTitle: '无忧安装模式',
+    atomicInstallExplain: '无忧安装模式说明',
     atomicInstallBenefit1: '先将文件解压/复制到临时目录',
     atomicInstallBenefit2: '使用原子操作移动文件，确保操作完整性',
     atomicInstallBenefit3: '如果安装失败，原有文件不会损坏',
     atomicInstallBenefit4: '对于覆盖安装，会保留原始文件直到新文件完全就绪',
-    atomicInstallNote: '注意：原子安装需要更多磁盘空间（临时目录），并可能对安装速度稍有影响',
+    atomicInstallNote: '注意：无忧安装需要更多磁盘空间（临时目录），并可能对安装速度稍有影响',
     deleteSourceTitle: '安装后删除源文件',
     deleteSourceDesc: '成功安装后自动删除原始文件',
     deleteSourceExplain: '功能说明',
@@ -157,7 +157,10 @@ export default {
     sorting: '排序中...',
     scenerySorted: '地景排序完成',
     scenerySortFailed: '地景排序失败',
+    createIndex: '创建索引',
     rebuildIndex: '重建索引',
+    creatingIndex: '创建中...',
+    createIndexTooltip: '创建地景索引（首次扫描所有地景包）',
     rebuilding: '重建中...',
     rebuildIndexTooltip: '重建地景索引（重新扫描所有地景包）',
     indexRebuilt: '地景索引重建完成',
@@ -209,7 +212,7 @@ export default {
     pathRequired: '请先在设置中配置X-Plane路径'
   },
   log: {
-    appStarted: 'XFastInstall 已启动',
+    appStarted: 'XFast Manager 已启动',
     launchedWithArgs: '通过参数启动',
     filesDropped: '文件拖入待分析',
     fileCount: '{count} 个文件',
@@ -311,6 +314,13 @@ export default {
     includePreRelease: '包含预发布版本',
     includePreReleaseDesc: '检查更新时包含 Beta/RC 等预发布版本'
   },
+  onboarding: {
+    title: '首次使用引导',
+    subtitle: '按步骤选择需要启用的功能',
+    next: '下一步',
+    back: '上一步',
+    finish: '完成'
+  },
   sceneryManager: {
     title: '地景管理器',
     subtitle: '管理地景加载顺序和启用状态',
@@ -327,6 +337,7 @@ export default {
     changesApplied: '更改已成功应用',
     applyFailed: '应用更改失败',
     noScenery: '未找到地景包',
+    noIndex: '尚未创建地景索引',
     moveUp: '上移',
     moveDown: '下移',
     missingLibraries: '缺少库',
@@ -358,6 +369,8 @@ export default {
     autoSortDone: '已重置排序，点击"应用更改"写入文件',
     autoSortNoChange: '排序已是最优，无需更改',
     autoSortFailed: '自动排序失败',
-    moreActions: '更多操作'
+    moreActions: '更多操作',
+    hintFromScan: '检测到地景变化，请从这里进入地景管理器进行排序',
+    hintFromSettings: '已启用地景排序，请从这里进入地景管理器进行排序'
   }
 }

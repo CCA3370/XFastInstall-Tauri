@@ -74,12 +74,6 @@ export interface AnalysisResult {
   nestedPasswordRequired?: Record<string, string>;
 }
 
-export interface NavdataInfo {
-  name: string;
-  cycle?: string;
-  airac?: string;
-}
-
 export interface ConflictInfo {
   task: InstallTask;
   existingVersion?: string;
@@ -159,6 +153,18 @@ export interface SceneryIndexStats {
   totalPackages: number;
   byCategory: Record<string, number>;
   lastUpdated: number;
+}
+
+export interface SceneryIndexStatus {
+  indexExists: boolean;
+  totalPackages: number;
+}
+
+export interface SceneryIndexScanResult {
+  indexExists: boolean;
+  added: number;
+  removed: number;
+  updated: number;
 }
 
 export interface SceneryManagerEntry {

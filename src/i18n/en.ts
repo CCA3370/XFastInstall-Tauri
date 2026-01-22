@@ -21,7 +21,7 @@ export default {
     copyFailed: 'Copy failed'
   },
   home: {
-    title: 'X-Plane Addon Installer',
+    title: 'X-Plane Addon Auto Manager',
     subtitle: 'Quick installation of X-Plane plugins and add-ons',
     setPathFirst: 'Please set X-Plane path first',
     goToSettings: 'Go to Settings',
@@ -109,15 +109,15 @@ export default {
     verifyRar: 'RAR Archives',
     verifyDirectory: 'Directories',
     rarVerificationNote: 'RAR format verification not supported (library limitation)',
-    atomicInstall: 'Atomic Installation Mode',
+    atomicInstall: 'Worry-Free Installation Mode',
     atomicInstallDesc: 'When enabled, the installation process will be safer and more reliable',
-    atomicInstallTitle: 'Atomic Installation Mode',
-    atomicInstallExplain: 'Atomic Installation Mode Explanation',
+    atomicInstallTitle: 'Worry-Free Installation Mode',
+    atomicInstallExplain: 'Worry-Free Installation Mode Explanation',
     atomicInstallBenefit1: 'Extract/copy files to temporary directory first',
     atomicInstallBenefit2: 'Use atomic operations to move files, ensuring operation integrity',
     atomicInstallBenefit3: 'If installation fails, original files will not be corrupted',
     atomicInstallBenefit4: 'For overwrite installations, old files are kept until new files are fully ready',
-    atomicInstallNote: 'Note: Atomic installation requires more disk space (temporary directory) and may slightly impact installation speed',
+    atomicInstallNote: 'Note: Worry-Free installation requires more disk space (temporary directory) and may slightly impact installation speed',
     deleteSourceTitle: 'Delete Source After Install',
     deleteSourceDesc: 'Automatically delete source files after successful installation',
     deleteSourceExplain: 'Feature Explanation',
@@ -144,7 +144,10 @@ export default {
     sorting: 'Sorting...',
     scenerySorted: 'Scenery packs sorted successfully',
     scenerySortFailed: 'Failed to sort scenery packs',
+    createIndex: 'Create Index',
     rebuildIndex: 'Rebuild',
+    creatingIndex: 'Creating...',
+    createIndexTooltip: 'Create scenery index (first-time full scan)',
     rebuilding: 'Rebuilding...',
     rebuildIndexTooltip: 'Rebuild scenery index (re-scan all scenery packages)',
     indexRebuilt: 'Scenery index rebuilt successfully',
@@ -196,7 +199,7 @@ export default {
     pathRequired: 'Please set X-Plane path in Settings first'
   },
   log: {
-    appStarted: 'XFastInstall started',
+    appStarted: 'XFast Manager started',
     launchedWithArgs: 'Launched with arguments',
     filesDropped: 'Files dropped for analysis',
     fileCount: '{count} file(s)',
@@ -298,6 +301,13 @@ export default {
     includePreRelease: 'Include Pre-releases',
     includePreReleaseDesc: 'Include Beta/RC and other pre-release versions when checking for updates'
   },
+  onboarding: {
+    title: 'First-Run Setup',
+    subtitle: 'Choose which features you want to enable',
+    next: 'Next',
+    back: 'Back',
+    finish: 'Finish'
+  },
   sceneryManager: {
     title: 'Scenery Manager',
     subtitle: 'Manage scenery loading order and enabled state',
@@ -314,6 +324,7 @@ export default {
     changesApplied: 'Changes applied successfully',
     applyFailed: 'Failed to apply changes',
     noScenery: 'No scenery packages found',
+    noIndex: 'Scenery index has not been created yet',
     moveUp: 'Move up',
     moveDown: 'Move down',
     missingLibraries: 'Missing libraries',
@@ -345,6 +356,8 @@ export default {
     autoSortDone: 'Sort order reset. Click "Apply Changes" to save.',
     autoSortNoChange: 'Sort order is already optimal, no changes needed',
     autoSortFailed: 'Auto sort failed',
-    moreActions: 'More Actions'
+    moreActions: 'More Actions',
+    hintFromScan: 'Scenery changes detected. Open the Scenery Manager here to sort.',
+    hintFromSettings: 'Scenery sorting is enabled. Open the Scenery Manager here.'
   }
 }

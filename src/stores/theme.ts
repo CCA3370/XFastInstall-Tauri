@@ -41,6 +41,8 @@ export const useThemeStore = defineStore('theme', () => {
     const isLargeList = expandedEntries.length > 100
     const transitionDurationMs = shouldSmoothThemeTransition() ? THEME_TRANSITION_DURATION_MS : 0
 
+    await syncWindowTheme()
+
     if (isLargeList) {
       // For large lists, use progressive theme switching
       await applyThemeProgressively(expandedEntries, transitionDurationMs)
@@ -52,8 +54,6 @@ export const useThemeStore = defineStore('theme', () => {
     // Sync Tauri window theme with app theme (with retry logic)
     if (transitionDurationMs > 0) {
       syncWindowThemeWithDelay(transitionDurationMs)
-    } else {
-      await syncWindowTheme()
     }
   }
 

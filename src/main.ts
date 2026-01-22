@@ -10,9 +10,19 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', component: Home },
+    { path: '/onboarding', component: () => import('./views/Onboarding.vue') },
     { path: '/scenery', component: () => import('./views/SceneryManager.vue') },
     { path: '/settings', component: () => import('./views/Settings.vue') },
   ],
+})
+
+router.beforeEach((to, _from, next) => {
+  const completed = localStorage.getItem('onboardingCompleted') === 'true'
+  if (!completed && to.path !== '/onboarding') {
+    next('/onboarding')
+    return
+  }
+  next()
 })
 
 const pinia = createPinia()

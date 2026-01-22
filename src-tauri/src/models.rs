@@ -215,8 +215,8 @@ pub struct InstallResult {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum HashAlgorithm {
-    Crc32,   // For ZIP and RAR
-    Sha256,  // For 7z (computed during extraction)
+    Crc32,  // For ZIP and RAR
+    Sha256, // For 7z (computed during extraction)
 }
 
 /// File hash information
@@ -293,7 +293,7 @@ impl SceneryCategory {
             SceneryCategory::Other => 4,
             SceneryCategory::Overlay => 5,
             SceneryCategory::Orthophotos => 6, // Mesh sub-category
-            SceneryCategory::Mesh => 6,        // Same as Orthophotos, use sub-priority to distinguish
+            SceneryCategory::Mesh => 6, // Same as Orthophotos, use sub-priority to distinguish
         }
     }
 }
@@ -338,11 +338,7 @@ pub struct SceneryPackageInfo {
 #[derive(Debug, Clone)]
 pub struct DsfHeader {
     pub is_overlay: bool,
-    pub airport_icao: Option<String>,
     pub creation_agent: Option<String>,
-    pub has_exclusions: bool,
-    pub requires_agpoint: bool,
-    pub requires_object: bool,
     pub object_references: Vec<String>,
     pub terrain_references: Vec<String>,
 }
@@ -375,6 +371,22 @@ pub struct SceneryIndexStats {
     pub by_category: HashMap<String, usize>,
     #[serde(with = "systemtime_serde")]
     pub last_updated: SystemTime,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneryIndexStatus {
+    pub index_exists: bool,
+    pub total_packages: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneryIndexScanResult {
+    pub index_exists: bool,
+    pub added: usize,
+    pub removed: usize,
+    pub updated: usize,
 }
 
 /// Entry for scenery manager UI
