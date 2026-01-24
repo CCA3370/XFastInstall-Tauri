@@ -1047,7 +1047,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import AnimatedText from '@/components/AnimatedText.vue'
 import { AddonType } from '@/types'
-import { logger } from '@/services/logger'
+import { logger, logError, logDebug } from '@/services/logger'
 
 const { t } = useI18n()
 const store = useAppStore()
@@ -1167,7 +1167,7 @@ onMounted(async () => {
     // Get app version
     appVersion.value = await invoke<string>('get_app_version')
   } catch (error) {
-    console.error('Failed to get app version:', error)
+    logError(`Failed to get app version: ${error}`, 'settings')
   }
 
   // Check and sync context menu registration status (Windows only)
@@ -1176,11 +1176,11 @@ onMounted(async () => {
       const actualStatus = await invoke<boolean>('is_context_menu_registered')
       // If stored status doesn't match actual status, update it
       if (store.isContextMenuRegistered !== actualStatus) {
-        console.log(`Context menu status mismatch: stored=${store.isContextMenuRegistered}, actual=${actualStatus}. Syncing...`)
+        logDebug(`Context menu status mismatch: stored=${store.isContextMenuRegistered}, actual=${actualStatus}. Syncing...`, 'settings')
         store.isContextMenuRegistered = actualStatus
       }
     } catch (error) {
-      console.error('Failed to check context menu status:', error)
+      logError(`Failed to check context menu status: ${error}`, 'settings')
     }
   }
 
@@ -1226,7 +1226,7 @@ async function handlePathBlur() {
           return
         }
       } catch (error) {
-        console.error('Failed to validate path:', error)
+        logError(`Failed to validate path: ${error}`, 'settings')
       }
     }
 
@@ -1368,7 +1368,7 @@ async function selectFolder() {
           return
         }
       } catch (error) {
-        console.error('Failed to validate path:', error)
+        logError(`Failed to validate path: ${error}`, 'settings')
       }
 
       // Path is valid, save it
@@ -1378,7 +1378,7 @@ async function selectFolder() {
       setTrackedTimeout(() => { saveStatus.value = null }, 2000)
     }
   } catch (error) {
-    console.error('Failed to open folder dialog:', error)
+    logError(`Failed to open folder dialog: ${error}`, 'settings')
     modal.showError(t('common.error') + ': ' + String(error))
   }
 }
@@ -1397,7 +1397,7 @@ async function toggleContextMenu() {
         // If already registered, just update the state
         const errorMsg = String(error).toLowerCase()
         if (errorMsg.includes('already') || errorMsg.includes('exist')) {
-          console.log('Context menu already registered, updating state')
+          logDebug('Context menu already registered, updating state', 'settings')
           store.isContextMenuRegistered = true
           toast.info(t('settings.contextMenuRegistered'))
         } else {
@@ -1414,7 +1414,7 @@ async function toggleContextMenu() {
         // If already unregistered, just update the state
         const errorMsg = String(error).toLowerCase()
         if (errorMsg.includes('not found') || errorMsg.includes('not exist') || errorMsg.includes('not registered')) {
-          console.log('Context menu already unregistered, updating state')
+          logDebug('Context menu already unregistered, updating state', 'settings')
           store.isContextMenuRegistered = false
           toast.info(t('settings.contextMenuUnregistered'))
         } else {
@@ -1486,7 +1486,7 @@ async function handleRebuildIndex() {
     toast.success(t('settings.indexRebuilt'))
     await sceneryStore.loadIndexStatus()
   } catch (error) {
-    console.error('Failed to rebuild scenery index:', error)
+    logError(`Failed to rebuild scenery index: ${error}`, 'settings')
     modal.showError(t('settings.indexRebuildFailed') + ': ' + String(error))
   } finally {
     isRebuildingIndex.value = false
@@ -1498,7 +1498,7 @@ async function openDeveloperProfile() {
   try {
     await invoke('open_url', { url: 'https://forums.x-plane.org/profile/1288218-3370/' })
   } catch (error) {
-    console.error('Failed to open URL:', error)
+    logError(`Failed to open URL: ${error}`, 'settings')
   }
 }
 

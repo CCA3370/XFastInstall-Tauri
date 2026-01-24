@@ -11,6 +11,7 @@ import type {
 } from '@/types'
 import { useAppStore } from './app'
 import { getNavdataCycleStatus } from '@/utils/airac'
+import { logError } from '@/services/logger'
 
 // Cache duration: 1 hour in milliseconds
 const UPDATE_CACHE_DURATION = 60 * 60 * 1000
@@ -211,7 +212,7 @@ export const useManagementStore = defineStore('management', () => {
       }
     } catch (e) {
       error.value = String(e)
-      console.error(`Failed to load ${config.logName}:`, e)
+      logError(`Failed to load ${config.logName}: ${e}`, 'management')
     } finally {
       isLoading.value = false
     }
@@ -260,7 +261,7 @@ export const useManagementStore = defineStore('management', () => {
         return item
       })
     } catch (e) {
-      console.error(`Failed to check ${config.logName} updates:`, e)
+      logError(`Failed to check ${config.logName} updates: ${e}`, 'management')
       // Don't set error.value here as this is a background operation
     } finally {
       isCheckingUpdates.value = false
@@ -391,7 +392,7 @@ export const useManagementStore = defineStore('management', () => {
       }
     } catch (e) {
       error.value = String(e)
-      console.error('Failed to toggle enabled:', e)
+      logError(`Failed to toggle enabled: ${e}`, 'management')
       throw e
     }
   }
@@ -430,7 +431,7 @@ export const useManagementStore = defineStore('management', () => {
       }
     } catch (e) {
       error.value = String(e)
-      console.error('Failed to delete item:', e)
+      logError(`Failed to delete item: ${e}`, 'management')
       throw e
     }
   }
@@ -450,7 +451,7 @@ export const useManagementStore = defineStore('management', () => {
       })
     } catch (e) {
       error.value = String(e)
-      console.error('Failed to open folder:', e)
+      logError(`Failed to open folder: ${e}`, 'management')
       throw e
     }
   }

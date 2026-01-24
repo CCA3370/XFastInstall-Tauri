@@ -397,7 +397,7 @@ function onWindowDragLeave(e: DragEvent) {
 }
 
 function onWindowDrop(e: DragEvent) {
-  console.log('Window drop event (HTML5)', e)
+  logDebug('Window drop event (HTML5)', 'drag-drop')
   e.preventDefault()
   // Ignore drop events when installing
   if (store.isInstalling) {
@@ -417,11 +417,11 @@ onMounted(async () => {
   try {
     const webview = getCurrentWebviewWindow()
     unlistenDragDrop = await webview.onDragDropEvent(async (event) => {
-      console.log('Tauri drag-drop event:', event)
+      logDebug(`Tauri drag-drop event: ${event.payload.type}`, 'drag-drop')
 
       // Ignore all drag-drop events when installing
       if (store.isInstalling) {
-        console.log('Ignoring drag-drop event (installing)')
+        logDebug('Ignoring drag-drop event (installing)', 'drag-drop')
         return
       }
 
@@ -440,16 +440,16 @@ onMounted(async () => {
         }
 
         const paths = event.payload.paths
-        console.log('Dropped paths from Tauri:', paths)
+        logDebug(`Dropped paths from Tauri: ${paths.join(', ')}`, 'drag-drop')
 
         if (paths && paths.length > 0) {
           await analyzeFiles(paths)
         }
       }
     })
-    console.log('Tauri drag-drop listener registered')
+    logDebug('Tauri drag-drop listener registered', 'drag-drop')
   } catch (error) {
-    console.error('Failed to setup Tauri drag-drop listener:', error)
+    logError(`Failed to setup Tauri drag-drop listener: ${error}`, 'drag-drop')
   }
 
   // Listen for installation progress events
@@ -457,9 +457,9 @@ onMounted(async () => {
     unlistenProgress = await listen<InstallProgress>('install-progress', (event) => {
       progressStore.update(event.payload)
     })
-    console.log('Progress listener registered')
+    logDebug('Progress listener registered', 'install')
   } catch (error) {
-    console.error('Failed to setup progress listener:', error)
+    logError(`Failed to setup progress listener: ${error}`, 'install')
   }
 
   // Listen for source deletion skipped events
@@ -468,9 +468,9 @@ onMounted(async () => {
       const path = event.payload
       toast.info(t('home.sourceDeletionSkipped', { path }))
     })
-    console.log('Source deletion skipped listener registered')
+    logDebug('Source deletion skipped listener registered', 'install')
   } catch (error) {
-    console.error('Failed to setup source deletion skipped listener:', error)
+    logError(`Failed to setup source deletion skipped listener: ${error}`, 'install')
   }
 
   // Note: Pending CLI args are now handled by the watcher above
@@ -509,7 +509,7 @@ async function analyzeFiles(paths: string[], passwords?: Record<string, string>)
   }
 
   if (!store.xplanePath) {
-    console.log('No X-Plane path set')
+    logDebug('No X-Plane path set', 'analysis')
     // Log the abort reason - toast.warning will also log via the store
     logOperation(t('log.taskAborted'), t('log.xplanePathNotSet'))
     toast.warning(t('home.pathNotSet'))
@@ -520,7 +520,7 @@ async function analyzeFiles(paths: string[], passwords?: Record<string, string>)
   logDebug(`Starting analysis with X-Plane path: ${store.xplanePath}`, 'analysis')
 
   try {
-    console.log('Paths to analyze:', paths)
+    logDebug(`Paths to analyze: ${paths.join(', ')}`, 'analysis')
 
     const result = await invoke<AnalysisResult>('analyze_addons', {
       paths,
@@ -529,8 +529,7 @@ async function analyzeFiles(paths: string[], passwords?: Record<string, string>)
       verificationPreferences: store.verificationPreferences
     })
 
-    console.log('Analysis result:', result)
-    logDebug(`Analysis returned ${result.tasks.length} tasks, ${result.errors.length} errors`, 'analysis')
+    logDebug(`Analysis result: ${result.tasks.length} tasks, ${result.errors.length} errors`, 'analysis')
 
     // Check if any archives require passwords
     if (result.passwordRequired && result.passwordRequired.length > 0) {
@@ -617,8 +616,7 @@ async function analyzeFiles(paths: string[], passwords?: Record<string, string>)
       toast.warning(t('home.noValidAddons'))
     }
   } catch (error) {
-    console.error('Analysis failed:', error)
-    // Non-blocking log call
+    // Non-blocking log call (also prints to console.error internally)
     logError(`${t('log.analysisFailed')}: ${error}`, 'analysis')
     modal.showError(t('home.failedToAnalyze') + ': ' + String(error))
   } finally {
@@ -768,8 +766,7 @@ async function handleInstall() {
     }, 100)
 
   } catch (error) {
-    console.error('Installation failed:', error)
-    // Non-blocking log call
+    // Non-blocking log call (also prints to console.error internally)
     logError(`${t('log.installationFailed')}: ${error}`, 'installation')
     modal.showError(t('home.installationFailed') + ': ' + String(error))
     store.isInstalling = false
@@ -793,7 +790,7 @@ async function handleSkipTask() {
       await invoke('skip_current_task')
       toast.info(t('taskControl.taskSkipped'))
     } catch (error) {
-      console.error('Failed to skip task:', error)
+      logError(`Failed to skip task: ${error}`, 'installation')
       toast.error(String(error))
     }
   }
@@ -815,7 +812,7 @@ async function handleCancelInstallation() {
       await invoke('cancel_installation')
       toast.info(t('taskControl.tasksCancelled'))
     } catch (error) {
-      console.error('Failed to cancel installation:', error)
+      logError(`Failed to cancel installation: ${error}`, 'installation')
       toast.error(String(error))
     }
   }

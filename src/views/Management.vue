@@ -8,6 +8,7 @@ import { useToastStore } from '@/stores/toast'
 import { useAppStore } from '@/stores/app'
 import { useModalStore } from '@/stores/modal'
 import { invoke } from '@tauri-apps/api/core'
+import { logError } from '@/services/logger'
 import ManagementEntryCard from '@/components/ManagementEntryCard.vue'
 import SceneryEntryCard from '@/components/SceneryEntryCard.vue'
 import draggable from 'vuedraggable'
@@ -373,13 +374,13 @@ async function handleGroupChange(category: string, evt: DraggableChangeEvent<Sce
     try {
       await sceneryStore.updateCategory(entry.folderName, newCategory)
     } catch (e) {
-      console.error('Failed to update category:', e)
+      logError(`Failed to update category: ${e}`, 'management')
       suppressLoading.value = true
       try {
         await sceneryStore.loadData()
         syncLocalEntries()
       } catch (reloadError) {
-        console.error('Failed to reload scenery data:', reloadError)
+        logError(`Failed to reload scenery data: ${reloadError}`, 'management')
       } finally {
         suppressLoading.value = false
       }

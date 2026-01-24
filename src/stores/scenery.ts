@@ -3,6 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { invoke } from '@tauri-apps/api/core'
 import type { SceneryIndexStatus, SceneryManagerData, SceneryManagerEntry, SceneryCategory } from '@/types'
 import { useAppStore } from './app'
+import { logError } from '@/services/logger'
 
 export const useSceneryStore = defineStore('scenery', () => {
   const appStore = useAppStore()
@@ -107,7 +108,7 @@ export const useSceneryStore = defineStore('scenery', () => {
       originalEntries.value = JSON.parse(JSON.stringify(result.entries))
     } catch (e) {
       error.value = String(e)
-      console.error('Failed to load scenery data:', e)
+      logError(`Failed to load scenery data: ${e}`, 'scenery')
     } finally {
       isLoading.value = false
     }
@@ -126,7 +127,7 @@ export const useSceneryStore = defineStore('scenery', () => {
       indexExists.value = status.indexExists
     } catch (e) {
       indexExists.value = false
-      console.error('Failed to load scenery index status:', e)
+      logError(`Failed to load scenery index status: ${e}`, 'scenery')
     }
   }
 
@@ -169,7 +170,7 @@ export const useSceneryStore = defineStore('scenery', () => {
       // Revert on error
       entry.category = oldCategory
       error.value = String(e)
-      console.error('Failed to update category:', e)
+      logError(`Failed to update category: ${e}`, 'scenery')
       throw e
     }
   }
@@ -245,7 +246,7 @@ export const useSceneryStore = defineStore('scenery', () => {
       data.value.needsSync = false
     } catch (e) {
       error.value = String(e)
-      console.error('Failed to apply changes:', e)
+      logError(`Failed to apply changes: ${e}`, 'scenery')
       throw e
     } finally {
       isSaving.value = false
@@ -285,7 +286,7 @@ export const useSceneryStore = defineStore('scenery', () => {
       originalEntries.value = originalEntries.value.filter(e => e.folderName !== folderName)
     } catch (e) {
       error.value = String(e)
-      console.error('Failed to delete scenery entry:', e)
+      logError(`Failed to delete scenery entry: ${e}`, 'scenery')
       throw e
     }
   }
