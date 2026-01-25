@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.6] - 2026-01-25
+
+### Changed
+
+#### Scenery Index Performance
+- **Faster Scenery Index** - Significantly improved performance for large scenery libraries (1000+ packages)
+  - Faster loading and saving of scenery index data
+  - Reduced memory usage when managing scenery
+  - Smoother experience when browsing and editing scenery order
+
+#### Data Storage
+- **New Index Location** - Scenery index now stored in `scenery.db` instead of `scenery_index.json`
+  - Existing users will need to rebuild their scenery index once after updating
+  - Click "Rebuild Index" in Settings or wait for automatic rebuild on first launch
+
 ## [0.7.5] - 2026-01-25
 
 ### Changed
