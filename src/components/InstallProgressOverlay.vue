@@ -119,17 +119,19 @@ const progressOffset = computed(() => {
 
 <style scoped>
 .progress-circle {
-  transition: stroke-dashoffset 0.3s ease-out;
+  /* Reduced transition since JS handles smooth interpolation */
+  transition: stroke-dashoffset 0.05s linear;
 }
 
 .progress-bar {
-  transition: width 0.3s ease-out;
+  /* Reduced transition since JS handles smooth interpolation */
+  transition: width 0.05s linear;
 }
 
 .progress-bar-glow {
   background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.4));
   filter: blur(4px);
-  transition: width 0.3s ease-out;
+  transition: width 0.05s linear;
 }
 
 .progress-text {
