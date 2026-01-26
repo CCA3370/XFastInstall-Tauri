@@ -187,7 +187,6 @@ export default {
     unknown: 'Unknown',
     noConfigPatternsHint: 'Please configure backup rules in Settings',
     liveryAircraftNotFound: 'Target aircraft not found',
-    liveryAircraftNotFoundDesc: 'Please install the corresponding aircraft first before installing this livery',
     // Close confirmation
     unsavedSceneryChangesTitle: 'Unsaved Scenery Changes',
     unsavedSceneryChangesMessage: 'You have unsaved scenery sorting changes. Are you sure you want to close?',
