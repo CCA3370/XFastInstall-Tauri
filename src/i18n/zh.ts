@@ -200,7 +200,6 @@ export default {
     unknown: '未知',
     noConfigPatternsHint: '需要在设置中配置备份规则',
     liveryAircraftNotFound: '未找到目标机模',
-    liveryAircraftNotFoundDesc: '需要先安装对应的机模才能安装此涂装',
     // Close confirmation
     unsavedSceneryChangesTitle: '地景排序未保存',
     unsavedSceneryChangesMessage: '您有未保存的地景排序更改，确定要关闭吗？',

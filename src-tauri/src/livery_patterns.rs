@@ -64,17 +64,17 @@ pub static LIVERY_PATTERNS: &[LiveryPattern] = &[
         detection_rules: &[
             DetectionRule {
                 pattern_type: "file",
-                pattern: "a319_icon*.png",
+                pattern: "a319_*icon11*.png",
                 parent_levels: 0,
             },
             DetectionRule {
                 pattern_type: "file",
-                pattern: "objects/fuselage319.png",
+                pattern: "objects/fuselage319*.png",
                 parent_levels: 0,
             },
             DetectionRule {
                 pattern_type: "file",
-                pattern: "objects/fuselage319.dds",
+                pattern: "objects/fuselage319*.dds",
                 parent_levels: 0,
             },
         ],
@@ -91,17 +91,27 @@ pub static LIVERY_PATTERNS: &[LiveryPattern] = &[
         detection_rules: &[
             DetectionRule {
                 pattern_type: "file",
-                pattern: "a320_icon*.png",
+                pattern: "a320_*icon11*.png",
                 parent_levels: 0,
             },
             DetectionRule {
                 pattern_type: "file",
-                pattern: "objects/fuselage320.png",
+                pattern: "objects/fuselage320*.png",
                 parent_levels: 0,
             },
             DetectionRule {
                 pattern_type: "file",
-                pattern: "objects/fuselage320.dds",
+                pattern: "objects/fuselage320*.dds",
+                parent_levels: 0,
+            },
+            DetectionRule {
+                pattern_type: "file",
+                pattern: "objects/LEAP1A.png",
+                parent_levels: 0,
+            },
+            DetectionRule {
+                pattern_type: "file",
+                pattern: "objects/LEAP1A.dds",
                 parent_levels: 0,
             },
         ],
@@ -118,17 +128,17 @@ pub static LIVERY_PATTERNS: &[LiveryPattern] = &[
         detection_rules: &[
             DetectionRule {
                 pattern_type: "file",
-                pattern: "a321_icon*.png",
+                pattern: "a321_*icon11*.png",
                 parent_levels: 0,
             },
             DetectionRule {
                 pattern_type: "file",
-                pattern: "objects/fuselage321.png",
+                pattern: "objects/fuselage321*.png",
                 parent_levels: 0,
             },
             DetectionRule {
                 pattern_type: "file",
-                pattern: "objects/fuselage321.dds",
+                pattern: "objects/fuselage321*.dds",
                 parent_levels: 0,
             },
         ],
@@ -145,17 +155,17 @@ pub static LIVERY_PATTERNS: &[LiveryPattern] = &[
         detection_rules: &[
             DetectionRule {
                 pattern_type: "file",
-                pattern: "a339_icon*.png",
+                pattern: "a339_*icon11*.png",
                 parent_levels: 0,
             },
             DetectionRule {
                 pattern_type: "file",
-                pattern: "objects/fuselage339.png",
+                pattern: "objects/fuselage339*.png",
                 parent_levels: 0,
             },
             DetectionRule {
                 pattern_type: "file",
-                pattern: "objects/fuselage339.dds",
+                pattern: "objects/fuselage339*.dds",
                 parent_levels: 0,
             },
         ],
@@ -222,28 +232,51 @@ pub fn check_livery_pattern(file_path: &str) -> Option<(&'static str, String)> {
 fn match_file_pattern(normalized: &str, normalized_lower: &str, rule: &DetectionRule) -> Option<String> {
     let pattern_lower = rule.pattern.to_lowercase();
 
-    // Check if pattern contains a path separator (e.g., "objects/fuselage319.png")
+    // Check if pattern contains a path separator (e.g., "objects/fuselage319*.png")
     if pattern_lower.contains('/') {
-        // Pattern includes path, match the full pattern
-        if let Some(pos) = normalized_lower.find(&pattern_lower) {
-            let prefix = &normalized[..pos];
-            let mut livery_root = if prefix.is_empty() {
-                String::new()
-            } else {
-                prefix.trim_end_matches('/').to_string()
-            };
+        // Split pattern into path and filename parts
+        let pattern_parts: Vec<&str> = pattern_lower.split('/').collect();
+        let pattern_filename = pattern_parts.last()?;
 
-            // Apply parent_levels
-            for _ in 0..rule.parent_levels {
-                if let Some(last_slash) = livery_root.rfind('/') {
-                    livery_root = livery_root[..last_slash].to_string();
-                } else {
-                    livery_root = String::new();
+        // Split the normalized path
+        let path_parts: Vec<&str> = normalized_lower.split('/').collect();
+
+        // Find where the pattern path matches in the normalized path
+        for i in 0..path_parts.len().saturating_sub(pattern_parts.len() - 1) {
+            // Check if the path components match
+            let mut path_matches = true;
+            for (j, pattern_part) in pattern_parts[..pattern_parts.len() - 1].iter().enumerate() {
+                if i + j >= path_parts.len() || path_parts[i + j] != *pattern_part {
+                    path_matches = false;
                     break;
                 }
             }
 
-            return Some(livery_root);
+            if path_matches {
+                // Check if the filename matches (with glob)
+                let filename_idx = i + pattern_parts.len() - 1;
+                if filename_idx < path_parts.len() && matches_glob(pattern_filename, path_parts[filename_idx]) {
+                    // Found a match! Calculate livery root
+                    let original_parts: Vec<&str> = normalized.split('/').collect();
+                    let mut livery_root = if i > 0 {
+                        original_parts[..i].join("/")
+                    } else {
+                        String::new()
+                    };
+
+                    // Apply parent_levels
+                    for _ in 0..rule.parent_levels {
+                        if let Some(last_slash) = livery_root.rfind('/') {
+                            livery_root = livery_root[..last_slash].to_string();
+                        } else {
+                            livery_root = String::new();
+                            break;
+                        }
+                    }
+
+                    return Some(livery_root);
+                }
+            }
         }
     } else {
         // Pattern is just a filename, possibly with glob
@@ -365,8 +398,22 @@ mod tests {
 
     #[test]
     fn test_check_livery_pattern_toliss_a319() {
-        // Test Toliss A319 icon detection
+        // Test Toliss A319 icon detection - basic pattern
         let result = check_livery_pattern("MyLivery/a319_icon11.png");
+        assert!(result.is_some());
+        let (aircraft_type, root) = result.unwrap();
+        assert_eq!(aircraft_type, "TOLISS_A319");
+        assert_eq!(root, "MyLivery");
+
+        // Test Toliss A319 icon detection - with prefix before icon11
+        let result = check_livery_pattern("MyLivery/a319_neo_icon11.png");
+        assert!(result.is_some());
+        let (aircraft_type, root) = result.unwrap();
+        assert_eq!(aircraft_type, "TOLISS_A319");
+        assert_eq!(root, "MyLivery");
+
+        // Test Toliss A319 icon detection - with suffix after icon11
+        let result = check_livery_pattern("MyLivery/a319_icon11_hd.png");
         assert!(result.is_some());
         let (aircraft_type, root) = result.unwrap();
         assert_eq!(aircraft_type, "TOLISS_A319");
@@ -402,6 +449,27 @@ mod tests {
         let (aircraft_type, root) = result.unwrap();
         assert_eq!(aircraft_type, "TOLISS_A320");
         assert_eq!(root, "MyLivery");
+
+        // Test Toliss A320 fuselage with suffix
+        let result = check_livery_pattern("MyLivery/objects/fuselage320_neo.png");
+        assert!(result.is_some());
+        let (aircraft_type, root) = result.unwrap();
+        assert_eq!(aircraft_type, "TOLISS_A320");
+        assert_eq!(root, "MyLivery");
+
+        // Test Toliss A320 LEAP1A engine detection
+        let result = check_livery_pattern("MyLivery/objects/LEAP1A.png");
+        assert!(result.is_some());
+        let (aircraft_type, root) = result.unwrap();
+        assert_eq!(aircraft_type, "TOLISS_A320");
+        assert_eq!(root, "MyLivery");
+
+        // Test Toliss A320 LEAP1A engine detection (dds)
+        let result = check_livery_pattern("MyLivery/objects/LEAP1A.dds");
+        assert!(result.is_some());
+        let (aircraft_type, root) = result.unwrap();
+        assert_eq!(aircraft_type, "TOLISS_A320");
+        assert_eq!(root, "MyLivery");
     }
 
     #[test]
@@ -413,11 +481,14 @@ mod tests {
 
     #[test]
     fn test_matches_glob() {
-        assert!(matches_glob("a319_icon*.png", "a319_icon11.png"));
-        assert!(matches_glob("a319_icon*.png", "a319_icon.png"));
-        assert!(matches_glob("a319_icon*.png", "a319_iconABC.png"));
-        assert!(!matches_glob("a319_icon*.png", "a320_icon11.png"));
-        assert!(!matches_glob("a319_icon*.png", "a319_icon11.dds"));
+        // Test pattern with multiple wildcards: a319_*icon11*.png
+        assert!(matches_glob("a319_*icon11*.png", "a319_icon11.png"));
+        assert!(matches_glob("a319_*icon11*.png", "a319_neo_icon11.png"));
+        assert!(matches_glob("a319_*icon11*.png", "a319_icon11_hd.png"));
+        assert!(matches_glob("a319_*icon11*.png", "a319_neo_icon11_hd.png"));
+        assert!(!matches_glob("a319_*icon11*.png", "a320_icon11.png"));
+        assert!(!matches_glob("a319_*icon11*.png", "a319_icon11.dds"));
+        // Test exact match
         assert!(matches_glob("fuselage319.png", "fuselage319.png"));
         assert!(!matches_glob("fuselage319.png", "fuselage320.png"));
     }
