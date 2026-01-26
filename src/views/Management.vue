@@ -155,8 +155,9 @@ async function loadTabData(tab: ManagementTab) {
         }
         break
       case 'scenery':
-        // Don't reload if there are unsaved changes - preserve local modifications
-        if (!sceneryStore.hasChanges) {
+        // Don't reload if user has made local modifications - preserve their work
+        // Use hasLocalChanges (not hasChanges) to allow reload even when needsSync is true
+        if (!sceneryStore.hasLocalChanges) {
           syncWarningDismissed.value = false
           await sceneryStore.loadData()
           if (sceneryStore.error) {

@@ -155,17 +155,17 @@ pub static LIVERY_PATTERNS: &[LiveryPattern] = &[
         detection_rules: &[
             DetectionRule {
                 pattern_type: "file",
-                pattern: "a339_*icon11*.png",
+                pattern: "A330-900_*icon11*.png",
                 parent_levels: 0,
             },
             DetectionRule {
                 pattern_type: "file",
-                pattern: "objects/fuselage339*.png",
+                pattern: "objects/A339_Engines.png",
                 parent_levels: 0,
             },
             DetectionRule {
                 pattern_type: "file",
-                pattern: "objects/fuselage339*.dds",
+                pattern: "objects/A339_Engines.dds",
                 parent_levels: 0,
             },
         ],

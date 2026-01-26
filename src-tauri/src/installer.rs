@@ -257,17 +257,39 @@ impl ProgressContext {
         let total = self.total_bytes.load(Ordering::SeqCst);
         let processed = self.processed_bytes.load(Ordering::SeqCst);
 
-        // Calculate percentage: installation is 0-90%, verification is 90-100%
+        // Calculate percentage based on phase
+        // - Calculating/Installing: 0-90% based on bytes processed
+        // - Verifying: 90-100% based on verification progress across tasks
+        // - Finalizing: 100% (only at the very end)
         let (percentage, verification_progress) = match phase {
-            InstallPhase::Verifying => {
-                let verify_progress = self.get_verification_progress();
-                // 90% + (verification_progress / 100) * 10%
-                let pct = 90.0 + (verify_progress / 100.0) * 10.0;
-                (pct, Some(verify_progress))
-            }
             InstallPhase::Finalizing => (100.0, None),
+            InstallPhase::Verifying => {
+                // Installation phase contributes 0-90%
+                let install_pct = if total > 0 {
+                    (processed as f64 / total as f64) * 90.0
+                } else {
+                    0.0
+                };
+
+                // Verification phase contributes 90-100%
+                // Based on completed tasks + current task verification progress
+                let verify_progress = self.get_verification_progress();
+                let verify_range = 10.0; // 90% to 100%
+                let total_tasks = self.total_tasks.max(1) as f64;
+                let per_task_verify = verify_range / total_tasks;
+
+                // Tasks 0 to current_task_index-1 are fully verified
+                // current_task_index is 0-based
+                let completed_verify_tasks = self.current_task_index as f64;
+                let completed_verify_pct = completed_verify_tasks * per_task_verify;
+                let current_verify_pct = (verify_progress / 100.0) * per_task_verify;
+                let verify_pct = 90.0 + completed_verify_pct + current_verify_pct;
+
+                // Use maximum to ensure progress never goes backward
+                (install_pct.max(verify_pct), Some(verify_progress))
+            }
             _ => {
-                // Installation phase: 0-90%
+                // Calculating/Installing phase: 0-90%
                 let install_pct = if total > 0 {
                     (processed as f64 / total as f64) * 90.0
                 } else {
