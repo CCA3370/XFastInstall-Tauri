@@ -9,6 +9,7 @@ import { useAppStore } from '@/stores/app'
 import { useModalStore } from '@/stores/modal'
 import { invoke } from '@tauri-apps/api/core'
 import { logError } from '@/services/logger'
+import { getNavdataCycleStatus } from '@/utils/airac'
 import ManagementEntryCard from '@/components/ManagementEntryCard.vue'
 import SceneryEntryCard from '@/components/SceneryEntryCard.vue'
 import draggable from 'vuedraggable'
@@ -56,6 +57,8 @@ const highlightedIndex = ref(-1)
 const currentMatchIndex = ref(0)
 const searchExpandedGroups = ref<Record<string, boolean>>({})
 const showOnlyMissingLibs = ref(false)
+const showOnlyUpdates = ref(false)
+const showOnlyOutdated = ref(false)
 const showMoreMenu = ref(false)
 const suppressLoading = ref(false)
 const moreMenuRef = ref<HTMLElement | null>(null)
@@ -104,15 +107,18 @@ watch(activeTab, async (newTab, oldTab) => {
   suppressLoading.value = true
 
   searchQuery.value = ''
-  
+  // Reset filter states when switching tabs
+  showOnlyUpdates.value = false
+  showOnlyOutdated.value = false
+
   // Start loading data (non-blocking)
   const loadPromise = loadTabData(newTab)
-  
+
   // Wait for transition animation to complete before showing loading state
   setTimeout(() => {
     suppressLoading.value = false
   }, 350) // Slightly longer than transition duration (300ms)
-  
+
   await loadPromise
 })
 
@@ -128,6 +134,27 @@ const sceneryDataTrigger = computed(() => ({
 watch(sceneryDataTrigger, () => {
   if (activeTab.value === 'scenery') {
     syncLocalEntries()
+  }
+})
+
+// Auto-reset filter when no missing dependencies remain
+watch(() => sceneryStore.missingDepsCount, (newCount) => {
+  if (newCount === 0 && showOnlyMissingLibs.value) {
+    showOnlyMissingLibs.value = false
+  }
+})
+
+// Auto-reset filter when no updates available
+watch(() => managementStore.aircraftUpdateCount + managementStore.pluginsUpdateCount, (newCount) => {
+  if (newCount === 0 && showOnlyUpdates.value) {
+    showOnlyUpdates.value = false
+  }
+})
+
+// Auto-reset filter when no outdated navdata
+watch(() => managementStore.navdataOutdatedCount, (newCount) => {
+  if (newCount === 0 && showOnlyOutdated.value) {
+    showOnlyOutdated.value = false
   }
 })
 
@@ -174,27 +201,42 @@ async function loadTabData(tab: ManagementTab) {
 
 // Filtered entries for non-scenery tabs
 const filteredAircraft = computed(() => {
-  if (!searchQuery.value.trim()) return managementStore.sortedAircraft
+  let items = managementStore.sortedAircraft
+  if (showOnlyUpdates.value) {
+    items = items.filter(a => a.hasUpdate)
+  }
+  if (!searchQuery.value.trim()) return items
   const query = searchQuery.value.toLowerCase()
-  return managementStore.sortedAircraft.filter(a =>
+  return items.filter(a =>
     a.displayName.toLowerCase().includes(query) ||
     a.folderName.toLowerCase().includes(query)
   )
 })
 
 const filteredPlugins = computed(() => {
-  if (!searchQuery.value.trim()) return managementStore.sortedPlugins
+  let items = managementStore.sortedPlugins
+  if (showOnlyUpdates.value) {
+    items = items.filter(p => p.hasUpdate)
+  }
+  if (!searchQuery.value.trim()) return items
   const query = searchQuery.value.toLowerCase()
-  return managementStore.sortedPlugins.filter(p =>
+  return items.filter(p =>
     p.displayName.toLowerCase().includes(query) ||
     p.folderName.toLowerCase().includes(query)
   )
 })
 
 const filteredNavdata = computed(() => {
-  if (!searchQuery.value.trim()) return managementStore.sortedNavdata
+  let items = managementStore.sortedNavdata
+  if (showOnlyOutdated.value) {
+    items = items.filter(n => {
+      const cycleText = n.cycle || n.airac
+      return getNavdataCycleStatus(cycleText) === 'outdated'
+    })
+  }
+  if (!searchQuery.value.trim()) return items
   const query = searchQuery.value.toLowerCase()
-  return managementStore.sortedNavdata.filter(n =>
+  return items.filter(n =>
     n.providerName.toLowerCase().includes(query) ||
     n.folderName.toLowerCase().includes(query)
   )
@@ -798,6 +840,18 @@ const isLoading = computed(() => {
           <span class="font-semibold text-emerald-600 dark:text-emerald-400">
             {{ managementStore.aircraftUpdateCount }}
           </span>
+          <button
+            @click="showOnlyUpdates = !showOnlyUpdates"
+            class="ml-1 px-2 py-0.5 rounded text-xs transition-colors"
+            :class="showOnlyUpdates
+              ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+              : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50'"
+            :title="t('management.filterUpdatesOnly')"
+          >
+            <Transition name="text-fade" mode="out-in">
+              <span :key="locale">{{ showOnlyUpdates ? t('management.showAll') : t('management.filterUpdatesOnly') }}</span>
+            </Transition>
+          </button>
         </div>
         <!-- Update available count for plugins -->
         <div v-if="activeTab === 'plugin' && managementStore.pluginsUpdateCount > 0" class="flex items-center gap-2">
@@ -807,6 +861,18 @@ const isLoading = computed(() => {
           <span class="font-semibold text-emerald-600 dark:text-emerald-400">
             {{ managementStore.pluginsUpdateCount }}
           </span>
+          <button
+            @click="showOnlyUpdates = !showOnlyUpdates"
+            class="ml-1 px-2 py-0.5 rounded text-xs transition-colors"
+            :class="showOnlyUpdates
+              ? 'bg-emerald-500 text-white hover:bg-emerald-600'
+              : 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50'"
+            :title="t('management.filterUpdatesOnly')"
+          >
+            <Transition name="text-fade" mode="out-in">
+              <span :key="locale">{{ showOnlyUpdates ? t('management.showAll') : t('management.filterUpdatesOnly') }}</span>
+            </Transition>
+          </button>
         </div>
         <!-- Checking updates indicator -->
         <div v-if="(activeTab === 'aircraft' || activeTab === 'plugin') && managementStore.isCheckingUpdates" class="flex items-center gap-2 text-gray-500 dark:text-gray-400">
@@ -824,6 +890,18 @@ const isLoading = computed(() => {
           <span class="font-semibold text-red-600 dark:text-red-400">
             {{ managementStore.navdataOutdatedCount }}
           </span>
+          <button
+            @click="showOnlyOutdated = !showOnlyOutdated"
+            class="ml-1 px-2 py-0.5 rounded text-xs transition-colors"
+            :class="showOnlyOutdated
+              ? 'bg-red-500 text-white hover:bg-red-600'
+              : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50'"
+            :title="t('management.filterOutdatedOnly')"
+          >
+            <Transition name="text-fade" mode="out-in">
+              <span :key="locale">{{ showOnlyOutdated ? t('management.showAll') : t('management.filterOutdatedOnly') }}</span>
+            </Transition>
+          </button>
         </div>
       </template>
 

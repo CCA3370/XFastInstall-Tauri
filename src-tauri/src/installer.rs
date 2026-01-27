@@ -198,6 +198,10 @@ struct ProgressContext {
     current_task_name: String,
     /// Verification progress (0-100), stored as integer percentage * 100 for atomic ops
     verification_progress: Arc<AtomicU64>,
+    /// Size of each task in bytes (for proportional progress calculation)
+    task_sizes: Arc<Vec<u64>>,
+    /// Cumulative bytes at the start of each task
+    task_cumulative: Arc<Vec<u64>>,
 }
 
 impl ProgressContext {
@@ -211,11 +215,26 @@ impl ProgressContext {
             total_tasks,
             current_task_name: String::new(),
             verification_progress: Arc::new(AtomicU64::new(0)),
+            task_sizes: Arc::new(Vec::new()),
+            task_cumulative: Arc::new(Vec::new()),
         }
     }
 
     fn set_total_bytes(&self, total: u64) {
         self.total_bytes.store(total, Ordering::SeqCst);
+    }
+
+    /// Set task sizes and compute cumulative bytes for each task
+    fn set_task_sizes(&mut self, sizes: Vec<u64>) {
+        // Calculate cumulative bytes at the start of each task
+        let mut cumulative = Vec::with_capacity(sizes.len());
+        let mut sum = 0u64;
+        for size in &sizes {
+            cumulative.push(sum);
+            sum += size;
+        }
+        self.task_sizes = Arc::new(sizes);
+        self.task_cumulative = Arc::new(cumulative);
     }
 
     fn add_bytes(&self, bytes: u64) {
@@ -258,44 +277,52 @@ impl ProgressContext {
         let processed = self.processed_bytes.load(Ordering::SeqCst);
 
         // Calculate percentage based on phase
-        // - Calculating/Installing: 0-90% based on bytes processed
-        // - Verifying: 90-100% based on verification progress across tasks
-        // - Finalizing: 100% (only at the very end)
+        // Each task gets a proportional share of 0-100% based on its size
+        // Within each task: 90% for installation, 10% for verification
         let (percentage, verification_progress) = match phase {
             InstallPhase::Finalizing => (100.0, None),
             InstallPhase::Verifying => {
-                // Installation phase contributes 0-90%
-                let install_pct = if total > 0 {
-                    (processed as f64 / total as f64) * 90.0
-                } else {
-                    0.0
-                };
-
-                // Verification phase contributes 90-100%
-                // Based on completed tasks + current task verification progress
                 let verify_progress = self.get_verification_progress();
-                let verify_range = 10.0; // 90% to 100%
-                let total_tasks = self.total_tasks.max(1) as f64;
-                let per_task_verify = verify_range / total_tasks;
+                let total_f = total as f64;
+                if total_f == 0.0 {
+                    return;
+                }
 
-                // Tasks 0 to current_task_index-1 are fully verified
-                // current_task_index is 0-based
-                let completed_verify_tasks = self.current_task_index as f64;
-                let completed_verify_pct = completed_verify_tasks * per_task_verify;
-                let current_verify_pct = (verify_progress / 100.0) * per_task_verify;
-                let verify_pct = 90.0 + completed_verify_pct + current_verify_pct;
+                // Get cumulative bytes at start of current task
+                let cumulative = self.task_cumulative.get(self.current_task_index).copied().unwrap_or(0) as f64;
+                let base_pct = (cumulative / total_f) * 100.0;
 
-                // Use maximum to ensure progress never goes backward
-                (install_pct.max(verify_pct), Some(verify_progress))
+                // Get current task's size and its contribution to total progress
+                let task_size = self.task_sizes.get(self.current_task_index).copied().unwrap_or(0) as f64;
+                let task_pct = (task_size / total_f) * 100.0;
+
+                // Installation part is complete (90% of task's share), verification in progress (10%)
+                let install_pct = task_pct * 0.9;
+                let verify_pct = (verify_progress / 100.0) * (task_pct * 0.1);
+
+                (base_pct + install_pct + verify_pct, Some(verify_progress))
             }
             _ => {
-                // Calculating/Installing phase: 0-90%
-                let install_pct = if total > 0 {
-                    (processed as f64 / total as f64) * 90.0
-                } else {
-                    0.0
-                };
-                (install_pct, None)
+                // Calculating/Installing phase
+                let total_f = total as f64;
+                if total_f == 0.0 {
+                    return;
+                }
+
+                // Get cumulative bytes at start of current task
+                let cumulative = self.task_cumulative.get(self.current_task_index).copied().unwrap_or(0) as f64;
+                let base_pct = (cumulative / total_f) * 100.0;
+
+                // Get current task's size
+                let task_size = self.task_sizes.get(self.current_task_index).copied().unwrap_or(1) as f64;
+                let task_pct = (task_size / total_f) * 100.0;
+
+                // Calculate progress within current task (only 90% for installation phase)
+                let current_processed = ((processed as f64) - cumulative).max(0.0);
+                let task_progress = (current_processed / task_size).min(1.0);
+                let install_pct = task_progress * (task_pct * 0.9);
+
+                (base_pct + install_pct, None)
             }
         };
 
@@ -393,8 +420,9 @@ impl Installer {
         let calc_start = Instant::now();
         crate::log_debug!("[TIMING] Size calculation started", "installer_timing");
         ctx.emit_progress(None, InstallPhase::Calculating);
-        let total_size = self.calculate_total_size(&tasks)?;
+        let (total_size, task_sizes) = self.calculate_total_size(&tasks)?;
         ctx.set_total_bytes(total_size);
+        ctx.set_task_sizes(task_sizes);
         crate::log_debug!(
             &format!(
                 "[TIMING] Size calculation completed in {:.2}ms: {} bytes ({:.2} MB)",
@@ -729,18 +757,22 @@ impl Installer {
     }
 
     /// Calculate total size of all tasks for progress tracking
+    /// Returns (total_size, per_task_sizes) for proportional progress calculation
     /// Includes extra size for backup/restore operations during clean install
-    fn calculate_total_size(&self, tasks: &[InstallTask]) -> Result<u64> {
+    fn calculate_total_size(&self, tasks: &[InstallTask]) -> Result<(u64, Vec<u64>)> {
         let mut total = 0u64;
+        let mut task_sizes = Vec::with_capacity(tasks.len());
+
         for task in tasks {
+            let mut task_size = 0u64;
             let source = Path::new(&task.source_path);
             let target = Path::new(&task.target_path);
 
             // Add source size (archive or directory)
             if source.is_dir() {
-                total += self.get_directory_size(source)?;
+                task_size += self.get_directory_size(source)?;
             } else if source.is_file() {
-                total += self.get_archive_size(source, task.archive_internal_root.as_deref())?;
+                task_size += self.get_archive_size(source, task.archive_internal_root.as_deref())?;
             }
 
             // For clean install with existing target, add backup/restore overhead
@@ -754,7 +786,7 @@ impl Installer {
                             if liveries_path.exists() && liveries_path.is_dir() {
                                 let liveries_size =
                                     self.get_directory_size(&liveries_path).unwrap_or(0);
-                                total += liveries_size * 2; // backup + restore
+                                task_size += liveries_size * 2; // backup + restore
                             }
                         }
 
@@ -762,7 +794,7 @@ impl Installer {
                         if task.backup_config_files {
                             let config_size =
                                 self.get_config_files_size(target, &task.config_file_patterns);
-                            total += config_size * 2; // backup + restore
+                            task_size += config_size * 2; // backup + restore
                         }
                     }
                     _ => {
@@ -770,8 +802,11 @@ impl Installer {
                     }
                 }
             }
+
+            task_sizes.push(task_size);
+            total += task_size;
         }
-        Ok(total)
+        Ok((total, task_sizes))
     }
 
     /// Get total size of config files matching patterns in a directory
