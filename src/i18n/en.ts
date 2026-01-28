@@ -46,7 +46,23 @@ export default {
     cannotInstallFromXPlaneDesc: 'Please drag files or archives from outside X-Plane folder. Cannot drag existing folders from within X-Plane.',
     ignoredTasks: '{count} add-ons ignored due to settings',
     allIgnored: 'All detected add-ons were ignored due to settings',
-    taskProgress: 'Task {current}'
+    taskProgress: 'Task {current}',
+    noTasksEnabled: 'No tasks are enabled for installation',
+    tasksAppended: '{count} new task(s) added',
+    duplicateTasksIgnored: 'File(s) already in list, skipped',
+    completed: 'completed',
+    installed: 'Installed',
+    failed: 'Failed',
+    installingNow: 'Installing...',
+    waiting: 'Waiting'
+  },
+  addonType: {
+    Aircraft: 'Aircraft',
+    Scenery: 'Scenery',
+    SceneryLibrary: 'Scenery Library',
+    Plugin: 'Plugin',
+    Navdata: 'Navdata',
+    Livery: 'Livery'
   },
   settings: {
     title: 'Settings',

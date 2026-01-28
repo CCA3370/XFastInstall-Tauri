@@ -46,7 +46,23 @@ export default {
     cannotInstallFromXPlaneDesc: '请拖入 X-Plane 目录外的文件或压缩包。不能直接拖入 X-Plane 内已存在的文件夹。',
     ignoredTasks: '根据设置忽略了 {count} 个插件',
     allIgnored: '根据设置，所有检测到的插件均被忽略',
-    taskProgress: '任务 {current}'
+    taskProgress: '任务 {current}',
+    noTasksEnabled: '没有启用任何安装任务',
+    tasksAppended: '已添加 {count} 个新任务',
+    duplicateTasksIgnored: '文件已在列表中，跳过添加',
+    completed: '已完成',
+    installed: '已安装',
+    failed: '失败',
+    installingNow: '安装中...',
+    waiting: '等待中'
+  },
+  addonType: {
+    Aircraft: '机模',
+    Scenery: '地景',
+    SceneryLibrary: '地景库',
+    Plugin: '插件',
+    Navdata: '导航数据',
+    Livery: '涂装'
   },
   settings: {
     title: '设置',
