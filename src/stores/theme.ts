@@ -1,11 +1,14 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import { getCurrentWindow } from '@tauri-apps/api/window'
+import { getItem, setItem, STORAGE_KEYS } from '@/services/storage'
 
 export const useThemeStore = defineStore('theme', () => {
-  // Initialize from localStorage or system preference
-  const isDark = ref(localStorage.getItem('theme') === 'dark' ||
-    (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches))
+  // Initialize with system preference, will be overwritten by stored value after init
+  const isDark = ref(window.matchMedia('(prefers-color-scheme: dark)').matches)
+
+  // Initialization flag
+  const isInitialized = ref(false)
 
   const MAX_SYNC_RETRIES = 3
   const THEME_TRANSITION_DURATION_MS = 500
@@ -15,6 +18,24 @@ export const useThemeStore = defineStore('theme', () => {
   // Track listeners for cleanup (fixes memory leak)
   let visibilityHandler: (() => void) | null = null
   let syncIntervalId: number | null = null
+
+  // Initialize store by loading saved theme
+  async function initStore(): Promise<void> {
+    if (isInitialized.value) return
+
+    const savedTheme = await getItem<string>(STORAGE_KEYS.THEME)
+    if (savedTheme === 'dark') {
+      isDark.value = true
+    } else if (savedTheme === 'light') {
+      isDark.value = false
+    }
+    // If no saved theme, keep system preference
+
+    isInitialized.value = true
+
+    // Setup listeners after initialization
+    setupListeners()
+  }
 
   function toggleTheme() {
     isDark.value = !isDark.value
@@ -95,10 +116,10 @@ export const useThemeStore = defineStore('theme', () => {
 
     if (isDark.value) {
       document.documentElement.classList.add('dark')
-      localStorage.setItem('theme', 'dark')
+      await setItem(STORAGE_KEYS.THEME, 'dark')
     } else {
       document.documentElement.classList.remove('dark')
-      localStorage.setItem('theme', 'light')
+      await setItem(STORAGE_KEYS.THEME, 'light')
     }
 
     scheduleThemeTransitionCleanup(transitionDurationMs)
@@ -111,10 +132,10 @@ export const useThemeStore = defineStore('theme', () => {
     // Apply theme to root first (for navbar, background, etc.)
     if (isDark.value) {
       document.documentElement.classList.add('dark')
-      localStorage.setItem('theme', 'dark')
+      await setItem(STORAGE_KEYS.THEME, 'dark')
     } else {
       document.documentElement.classList.remove('dark')
-      localStorage.setItem('theme', 'light')
+      await setItem(STORAGE_KEYS.THEME, 'light')
     }
 
     // Get viewport bounds
@@ -184,24 +205,27 @@ export const useThemeStore = defineStore('theme', () => {
     await syncWindowTheme()
   }
 
-  // Watch for changes and apply
-  watch(isDark, applyTheme, { immediate: true })
+  // Setup listeners (called after initialization)
+  function setupListeners() {
+    // Watch for changes and apply
+    watch(isDark, applyTheme, { immediate: true })
 
-  // Re-sync when window becomes visible (handles edge cases)
-  if (typeof document !== 'undefined') {
-    // Store reference to handler for cleanup
-    visibilityHandler = () => {
-      if (!document.hidden) {
-        syncWindowTheme()
+    // Re-sync when window becomes visible (handles edge cases)
+    if (typeof document !== 'undefined') {
+      // Store reference to handler for cleanup
+      visibilityHandler = () => {
+        if (!document.hidden) {
+          syncWindowTheme()
+        }
       }
-    }
-    document.addEventListener('visibilitychange', visibilityHandler)
+      document.addEventListener('visibilitychange', visibilityHandler)
 
-    // Periodic sync every 5 seconds to ensure titlebar stays in sync
-    // Store reference for cleanup
-    syncIntervalId = window.setInterval(() => {
-      syncWindowTheme()
-    }, 5000)
+      // Periodic sync every 5 seconds to ensure titlebar stays in sync
+      // Store reference for cleanup
+      syncIntervalId = window.setInterval(() => {
+        syncWindowTheme()
+      }, 5000)
+    }
   }
 
   // Cleanup function to prevent memory leaks
@@ -226,6 +250,8 @@ export const useThemeStore = defineStore('theme', () => {
 
   return {
     isDark,
+    isInitialized,
+    initStore,
     toggleTheme,
     forceSync,
     cleanup

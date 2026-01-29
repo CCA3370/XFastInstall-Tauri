@@ -110,6 +110,10 @@ export interface NavdataInfo {
   airac?: string;
 }
 
+export interface VersionInfo {
+  version?: string;
+}
+
 export interface InstallTask {
   id: string;
   type: AddonType;
@@ -135,6 +139,10 @@ export interface InstallTask {
   existingNavdataInfo?: NavdataInfo;
   /** For Navdata: new cycle info to be installed */
   newNavdataInfo?: NavdataInfo;
+  /** For Aircraft/Plugin: existing version info (if conflict exists) */
+  existingVersionInfo?: VersionInfo;
+  /** For Aircraft/Plugin: new version info to be installed */
+  newVersionInfo?: VersionInfo;
   /** Whether to backup liveries during clean install (Aircraft only) */
   backupLiveries?: boolean;
   /** Whether to backup configuration files during clean install (Aircraft only) */
@@ -280,6 +288,7 @@ export interface AircraftInfo {
   updateUrl?: string;
   latestVersion?: string;
   hasUpdate: boolean;
+  cfgDisabled?: boolean;
 }
 
 export interface PluginInfo {
@@ -292,6 +301,7 @@ export interface PluginInfo {
   updateUrl?: string;
   latestVersion?: string;
   hasUpdate: boolean;
+  cfgDisabled?: boolean;
 }
 
 export interface NavdataManagerInfo {

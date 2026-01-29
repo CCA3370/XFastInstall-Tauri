@@ -5,6 +5,7 @@ import type { SceneryIndexStatus, SceneryManagerData, SceneryManagerEntry, Scene
 import { parseApiError, getErrorMessage } from '@/types'
 import { useAppStore } from './app'
 import { logError } from '@/services/logger'
+import { getItem, setItem, STORAGE_KEYS } from '@/services/storage'
 
 export const useSceneryStore = defineStore('scenery', () => {
   const appStore = useAppStore()
@@ -19,15 +20,21 @@ export const useSceneryStore = defineStore('scenery', () => {
   // Track original state for change detection
   const originalEntries = ref<SceneryManagerEntry[]>([])
 
-  // Collapsed groups state (persisted to localStorage)
+  // Collapsed groups state (persisted to Tauri Store)
   // Default: all groups are expanded (false = expanded, true = collapsed)
-  const collapsedGroups = ref<Record<SceneryCategory, boolean>>(
-    JSON.parse(localStorage.getItem('sceneryGroupsCollapsed') || '{}')
-  )
+  const collapsedGroups = ref<Record<SceneryCategory, boolean>>({} as Record<SceneryCategory, boolean>)
 
-  // Watch for changes and persist to localStorage
+  // Load collapsed groups from storage
+  async function initStore(): Promise<void> {
+    const saved = await getItem<Record<SceneryCategory, boolean>>(STORAGE_KEYS.SCENERY_GROUPS_COLLAPSED)
+    if (saved && typeof saved === 'object') {
+      collapsedGroups.value = saved
+    }
+  }
+
+  // Watch for changes and persist to Tauri Store
   watch(collapsedGroups, (newVal) => {
-    localStorage.setItem('sceneryGroupsCollapsed', JSON.stringify(newVal))
+    setItem(STORAGE_KEYS.SCENERY_GROUPS_COLLAPSED, newVal)
   }, { deep: true })
 
   // Computed properties
@@ -353,6 +360,7 @@ export const useSceneryStore = defineStore('scenery', () => {
     indexExists,
 
     // Actions
+    initStore,
     loadData,
     loadIndexStatus,
     toggleEnabled,

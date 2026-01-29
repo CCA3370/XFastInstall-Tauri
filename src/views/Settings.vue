@@ -1061,6 +1061,7 @@ import { open } from '@tauri-apps/plugin-dialog'
 import AnimatedText from '@/components/AnimatedText.vue'
 import { AddonType, getErrorMessage } from '@/types'
 import { logger, logError, logDebug } from '@/services/logger'
+import { getItem, setItem, STORAGE_KEYS } from '@/services/storage'
 
 const { t } = useI18n()
 const store = useAppStore()
@@ -1151,15 +1152,15 @@ function toggleAllPreferences() {
   })
 }
 
-function handleToggleAutoSortScenery() {
+async function handleToggleAutoSortScenery() {
   const wasEnabled = store.autoSortScenery
   store.toggleAutoSortScenery()
 
   if (!wasEnabled && store.autoSortScenery) {
-    const shown = localStorage.getItem('sceneryAutoSortHintShown')
+    const shown = await getItem<string>(STORAGE_KEYS.SCENERY_AUTO_SORT_HINT_SHOWN)
     if (!shown) {
       store.showSceneryManagerHint('sceneryManager.hintFromSettings')
-      localStorage.setItem('sceneryAutoSortHintShown', 'true')
+      await setItem(STORAGE_KEYS.SCENERY_AUTO_SORT_HINT_SHOWN, 'true')
     }
   }
 }

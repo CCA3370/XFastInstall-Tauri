@@ -7,6 +7,7 @@ import { useModalStore } from './modal'
 import { useI18n } from 'vue-i18n'
 import { logError, logDebug, logBasic } from '@/services/logger'
 import { invokeVoidCommand, CommandError } from '@/services/api'
+import { getItem, setItem, STORAGE_KEYS } from '@/services/storage'
 
 export const useUpdateStore = defineStore('update', () => {
   const { t } = useI18n()
@@ -20,20 +21,29 @@ export const useUpdateStore = defineStore('update', () => {
   const autoCheckEnabled = ref(true)
   const includePreRelease = ref(false)
 
-  // 从 localStorage 加载设置
-  const savedAutoCheck = localStorage.getItem('autoCheckEnabled')
-  if (savedAutoCheck !== null) {
-    autoCheckEnabled.value = JSON.parse(savedAutoCheck)
-  }
+  // Initialization flag
+  const isInitialized = ref(false)
 
-  const savedIncludePreRelease = localStorage.getItem('includePreRelease')
-  if (savedIncludePreRelease !== null) {
-    includePreRelease.value = JSON.parse(savedIncludePreRelease)
-  }
+  // Initialize store by loading saved settings
+  async function initStore(): Promise<void> {
+    if (isInitialized.value) return
 
-  const savedLastCheckTime = localStorage.getItem('lastCheckTime')
-  if (savedLastCheckTime) {
-    lastCheckTime.value = parseInt(savedLastCheckTime, 10)
+    const savedAutoCheck = await getItem<boolean>(STORAGE_KEYS.AUTO_CHECK_ENABLED)
+    if (typeof savedAutoCheck === 'boolean') {
+      autoCheckEnabled.value = savedAutoCheck
+    }
+
+    const savedIncludePreRelease = await getItem<boolean>(STORAGE_KEYS.INCLUDE_PRE_RELEASE)
+    if (typeof savedIncludePreRelease === 'boolean') {
+      includePreRelease.value = savedIncludePreRelease
+    }
+
+    const savedLastCheckTime = await getItem<string>(STORAGE_KEYS.LAST_CHECK_TIME)
+    if (savedLastCheckTime) {
+      lastCheckTime.value = parseInt(savedLastCheckTime, 10)
+    }
+
+    isInitialized.value = true
   }
 
   async function checkForUpdates(manual = false) {
@@ -80,7 +90,7 @@ export const useUpdateStore = defineStore('update', () => {
       }
 
       lastCheckTime.value = Date.now()
-      localStorage.setItem('lastCheckTime', lastCheckTime.value.toString())
+      await setItem(STORAGE_KEYS.LAST_CHECK_TIME, lastCheckTime.value.toString())
     } catch (error) {
       const errorMessage =
         typeof error === 'string' ? error : (error as Error)?.message ?? String(error)
@@ -125,15 +135,15 @@ export const useUpdateStore = defineStore('update', () => {
     }
   }
 
-  function toggleAutoCheck() {
+  async function toggleAutoCheck() {
     autoCheckEnabled.value = !autoCheckEnabled.value
-    localStorage.setItem('autoCheckEnabled', JSON.stringify(autoCheckEnabled.value))
+    await setItem(STORAGE_KEYS.AUTO_CHECK_ENABLED, autoCheckEnabled.value)
     logBasic(`Auto-check updates ${autoCheckEnabled.value ? 'enabled' : 'disabled'}`, 'update')
   }
 
-  function toggleIncludePreRelease() {
+  async function toggleIncludePreRelease() {
     includePreRelease.value = !includePreRelease.value
-    localStorage.setItem('includePreRelease', JSON.stringify(includePreRelease.value))
+    await setItem(STORAGE_KEYS.INCLUDE_PRE_RELEASE, includePreRelease.value)
     logBasic(`Include pre-release ${includePreRelease.value ? 'enabled' : 'disabled'}`, 'update')
   }
 
@@ -144,6 +154,8 @@ export const useUpdateStore = defineStore('update', () => {
     checkInProgress,
     autoCheckEnabled,
     includePreRelease,
+    isInitialized,
+    initStore,
     checkForUpdates,
     dismissUpdate,
     openReleaseUrl,

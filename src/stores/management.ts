@@ -12,6 +12,7 @@ import type {
 } from '@/types'
 import { useAppStore } from './app'
 import { useToastStore } from './toast'
+import { useLockStore } from './lock'
 import { getNavdataCycleStatus } from '@/utils/airac'
 import { logError } from '@/services/logger'
 
@@ -171,9 +172,19 @@ export const useManagementStore = defineStore('management', () => {
     })
   }
 
-  // Get items that need update check (no valid cache)
-  function getItemsNeedingUpdateCheck<T extends { updateUrl?: string }>(items: T[]): T[] {
-    return items.filter(item => item.updateUrl && !isCacheValid(item.updateUrl))
+  // Get items that need update check (no valid cache, and not locked)
+  function getItemsNeedingUpdateCheck<T extends { updateUrl?: string; folderName: string }>(
+    items: T[],
+    itemType: 'aircraft' | 'plugin'
+  ): T[] {
+    const lockStore = useLockStore()
+    return items.filter(item => {
+      if (!item.updateUrl) return false
+      if (isCacheValid(item.updateUrl)) return false
+      // Skip locked items - they shouldn't be checked for updates
+      if (lockStore.isLocked(itemType, item.folderName)) return false
+      return true
+    })
   }
 
   // Generic load function for management items
@@ -231,6 +242,7 @@ export const useManagementStore = defineStore('management', () => {
     checkCommand: string
     checkParamName: string
     logName: string
+    itemType: 'aircraft' | 'plugin'
   }
 
   interface UpdateCheckResult {
@@ -243,8 +255,8 @@ export const useManagementStore = defineStore('management', () => {
       return { checked: false, updateCount: 0 }
     }
 
-    // Only check items that have update URLs and no valid cache
-    const itemsToCheck = getItemsNeedingUpdateCheck(config.itemsRef.value)
+    // Only check items that have update URLs, no valid cache, and are not locked
+    const itemsToCheck = getItemsNeedingUpdateCheck(config.itemsRef.value, config.itemType)
     if (itemsToCheck.length === 0) {
       // All items have valid cache, count current updates
       const updateCount = config.itemsRef.value.filter(item => item.hasUpdate).length
@@ -303,7 +315,10 @@ export const useManagementStore = defineStore('management', () => {
       totalCountRef: aircraftTotalCount,
       enabledCountRef: aircraftEnabledCount,
       applyCache: true,
-      afterLoad: () => checkAircraftUpdates(),
+      afterLoad: () => {
+        syncCfgDisabledToLockStore('aircraft', aircraft.value)
+        checkAircraftUpdates()
+      },
       logName: 'aircraft'
     })
   }
@@ -323,7 +338,8 @@ export const useManagementStore = defineStore('management', () => {
       itemsRef: aircraft,
       checkCommand: 'check_aircraft_updates',
       checkParamName: 'aircraft',
-      logName: 'aircraft'
+      logName: 'aircraft',
+      itemType: 'aircraft'
     })
     // Show toast when check was actually performed and no updates found
     if (result.checked && result.updateCount === 0) {
@@ -339,7 +355,10 @@ export const useManagementStore = defineStore('management', () => {
       totalCountRef: pluginsTotalCount,
       enabledCountRef: pluginsEnabledCount,
       applyCache: true,
-      afterLoad: () => checkPluginsUpdates(),
+      afterLoad: () => {
+        syncCfgDisabledToLockStore('plugin', plugins.value)
+        checkPluginsUpdates()
+      },
       logName: 'plugins'
     })
   }
@@ -359,7 +378,8 @@ export const useManagementStore = defineStore('management', () => {
       itemsRef: plugins,
       checkCommand: 'check_plugins_updates',
       checkParamName: 'plugins',
-      logName: 'plugins'
+      logName: 'plugins',
+      itemType: 'plugin'
     })
     // Show toast when check was actually performed and no updates found
     if (result.checked && result.updateCount === 0) {

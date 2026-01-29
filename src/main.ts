@@ -5,6 +5,7 @@ import App from './App.vue'
 import Home from './views/Home.vue'
 import { i18n } from './i18n'
 import './style.css'
+import { initStorage, getItem, STORAGE_KEYS } from './services/storage'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -17,30 +18,62 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to, _from, next) => {
-  const completed = localStorage.getItem('onboardingCompleted') === 'true'
-  if (!completed && to.path !== '/onboarding') {
-    next('/onboarding')
-    return
-  }
-  next()
-})
+// Initialize storage and setup navigation guard
+async function initApp() {
+  // Initialize Tauri Store first
+  await initStorage()
 
-const pinia = createPinia()
-const app = createApp(App)
+  // Setup navigation guard with async storage check
+  router.beforeEach(async (to, _from, next) => {
+    const completed = await getItem<string>(STORAGE_KEYS.ONBOARDING_COMPLETED)
+    if (completed !== 'true' && to.path !== '/onboarding') {
+      next('/onboarding')
+      return
+    }
+    next()
+  })
 
-app.use(pinia)
-app.use(router)
-app.use(i18n)
-app.mount('#app')
+  const pinia = createPinia()
+  const app = createApp(App)
 
-// Hide loading screen after Vue app is mounted
-setTimeout(() => {
-  const loadingScreen = document.getElementById('loading-screen')
-  if (loadingScreen) {
-    loadingScreen.classList.add('fade-out')
-    setTimeout(() => {
-      loadingScreen.remove()
-    }, 300)
-  }
-}, 100)
+  app.use(pinia)
+  app.use(router)
+  app.use(i18n)
+
+  // Initialize stores that need async loading
+  const { useAppStore } = await import('./stores/app')
+  const { useThemeStore } = await import('./stores/theme')
+  const { useLockStore } = await import('./stores/lock')
+  const { useUpdateStore } = await import('./stores/update')
+  const { useSceneryStore } = await import('./stores/scenery')
+
+  const appStore = useAppStore()
+  const themeStore = useThemeStore()
+  const lockStore = useLockStore()
+  const updateStore = useUpdateStore()
+  const sceneryStore = useSceneryStore()
+
+  // Initialize all stores in parallel
+  await Promise.all([
+    appStore.initStore(),
+    themeStore.initStore(),
+    lockStore.initStore(),
+    updateStore.initStore(),
+    sceneryStore.initStore(),
+  ])
+
+  app.mount('#app')
+
+  // Hide loading screen after Vue app is mounted
+  setTimeout(() => {
+    const loadingScreen = document.getElementById('loading-screen')
+    if (loadingScreen) {
+      loadingScreen.classList.add('fade-out')
+      setTimeout(() => {
+        loadingScreen.remove()
+      }, 300)
+    }
+  }, 100)
+}
+
+initApp()

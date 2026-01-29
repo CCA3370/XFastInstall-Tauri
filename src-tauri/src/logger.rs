@@ -5,6 +5,8 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
+use crate::app_dirs;
+
 const MAX_LOG_SIZE: u64 = 3 * 1024 * 1024; // 3MB
 const TRIM_TARGET_SIZE: u64 = 2 * 1024 * 1024; // Trim to 2MB when exceeds max
 
@@ -91,10 +93,7 @@ struct LoggerInner {
 
 impl LoggerInner {
     fn new() -> Self {
-        let log_dir = dirs::data_local_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("XFast Manager")
-            .join("logs");
+        let log_dir = app_dirs::get_logs_dir();
 
         // Create log directory if it doesn't exist
         if let Err(e) = fs::create_dir_all(&log_dir) {
@@ -102,7 +101,7 @@ impl LoggerInner {
         }
 
         Self {
-            log_path: log_dir.join("xfastmanager.log"),
+            log_path: app_dirs::get_log_file_path(),
             locale: Locale::default(),
             is_first_log: true,
             min_level: LogLevel::Info, // Default to Info level

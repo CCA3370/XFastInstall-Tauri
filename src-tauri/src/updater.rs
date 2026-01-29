@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use crate::app_dirs;
+
 /// Update information returned to the frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -265,10 +267,7 @@ impl UpdateChecker {
 
     /// Get last check time from localStorage (via app data directory)
     fn get_last_check_time(&self) -> Option<u64> {
-        // For simplicity, we'll use a file in the app data directory
-        let app_dir = dirs::data_local_dir()?;
-        let xfastmanager_dir = app_dir.join("XFast Manager");
-        let cache_file = xfastmanager_dir.join("update_check_cache.txt");
+        let cache_file = app_dirs::get_update_cache_path();
 
         if let Ok(content) = std::fs::read_to_string(cache_file) {
             content.trim().parse().ok()
@@ -284,12 +283,12 @@ impl UpdateChecker {
             .unwrap_or_default()
             .as_secs();
 
-        if let Some(app_dir) = dirs::data_local_dir() {
-            let xfastmanager_dir = app_dir.join("XFast Manager");
-            let _ = std::fs::create_dir_all(&xfastmanager_dir);
-            let cache_file = xfastmanager_dir.join("update_check_cache.txt");
-            let _ = std::fs::write(cache_file, now.to_string());
+        let cache_file = app_dirs::get_update_cache_path();
+        // Ensure parent directory exists
+        if let Some(parent) = cache_file.parent() {
+            let _ = std::fs::create_dir_all(parent);
         }
+        let _ = std::fs::write(cache_file, now.to_string());
     }
 }
 

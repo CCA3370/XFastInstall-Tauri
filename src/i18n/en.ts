@@ -200,9 +200,12 @@ export default {
     confirmTrustArchive: 'I trust this archive and want to proceed',
     existingCycle: 'Existing',
     newCycle: 'New',
+    existingVersion: 'Installed',
+    newVersion: 'New',
     unknown: 'Unknown',
     noConfigPatternsHint: 'Please configure backup rules in Settings',
     liveryAircraftNotFound: 'Target aircraft not found',
+    targetLockedWarning: 'Target exists and is locked',
     // Close confirmation
     unsavedSceneryChangesTitle: 'Unsaved Scenery Changes',
     unsavedSceneryChangesMessage: 'You have unsaved scenery sorting changes. Are you sure you want to close?',
@@ -424,7 +427,9 @@ export default {
     toggleFailed: 'Failed to toggle state',
     openFolderFailed: 'Failed to open folder',
     scanFailed: 'Failed to scan',
-    noItems: 'No items found'
+    noItems: 'No items found',
+    lock: 'Lock',
+    unlock: 'Unlock'
   },
   errors: {
     validation_failed: 'Invalid input data',

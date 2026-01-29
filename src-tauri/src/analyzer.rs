@@ -651,6 +651,16 @@ impl Analyzer {
             (target_path.exists(), None)
         };
 
+        // For Aircraft/Plugin: read existing version info if conflict exists
+        let existing_version_info = if conflict_exists
+            && matches!(item.addon_type, AddonType::Aircraft | AddonType::Plugin)
+        {
+            let (version, _, _) = crate::management_index::read_version_info_with_url(&target_path);
+            version.map(|v| crate::models::VersionInfo { version: Some(v) })
+        } else {
+            None
+        };
+
         // Get password for this archive if it was provided
         let password = Self::find_password(archive_passwords, &item.path);
 
@@ -712,6 +722,8 @@ impl Analyzer {
             size_confirmed: false, // User must confirm if there's a warning
             existing_navdata_info,
             new_navdata_info: item.navdata_info,
+            existing_version_info,
+            new_version_info: item.version_info,
             backup_liveries: true,     // Default to true (safe)
             backup_config_files: true, // Default to true (safe)
             config_file_patterns: vec!["*_prefs.txt".to_string()], // Default pattern
@@ -1048,6 +1060,7 @@ mod tests {
             extraction_chain: None,
             navdata_info: None,
             livery_aircraft_type: None,
+            version_info: None,
         }
     }
 
@@ -1075,6 +1088,8 @@ mod tests {
             size_confirmed: false,
             existing_navdata_info: None,
             new_navdata_info: None,
+            existing_version_info: None,
+            new_version_info: None,
             backup_liveries: true,
             backup_config_files: true,
             config_file_patterns: vec!["*_prefs.txt".to_string()],

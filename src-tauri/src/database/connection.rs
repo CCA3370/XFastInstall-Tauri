@@ -1,5 +1,6 @@
 //! Database connection management with WAL mode configuration
 
+use crate::app_dirs;
 use crate::error::ApiError;
 use rusqlite::Connection;
 use std::path::PathBuf;
@@ -38,38 +39,7 @@ impl std::ops::DerefMut for DatabaseConnection {
 
 /// Get the path to the scenery database file
 pub fn get_database_path() -> PathBuf {
-    #[cfg(target_os = "windows")]
-    {
-        if let Some(local_app_data) = std::env::var_os("LOCALAPPDATA") {
-            return PathBuf::from(local_app_data)
-                .join("XFast Manager")
-                .join("scenery.db");
-        }
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        if let Some(home) = std::env::var_os("HOME") {
-            return PathBuf::from(home)
-                .join("Library")
-                .join("Application Support")
-                .join("XFast Manager")
-                .join("scenery.db");
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        if let Some(home) = std::env::var_os("HOME") {
-            return PathBuf::from(home)
-                .join(".config")
-                .join("xfastmanager")
-                .join("scenery.db");
-        }
-    }
-
-    // Fallback to current directory
-    PathBuf::from("scenery.db")
+    app_dirs::get_database_path()
 }
 
 /// Configure database pragmas for optimal performance
