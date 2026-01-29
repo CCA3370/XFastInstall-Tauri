@@ -2659,6 +2659,10 @@ impl Scanner {
             .unwrap_or("Unknown Aircraft")
             .to_string();
 
+        // Read version info from the install folder
+        let (version, _, _) = crate::management_index::read_version_info_with_url(&install_path);
+        let version_info = version.map(|v| crate::models::VersionInfo { version: Some(v) });
+
         Ok(Some(DetectedItem {
             original_input_path: String::new(),
             addon_type: AddonType::Aircraft,
@@ -2668,6 +2672,7 @@ impl Scanner {
             extraction_chain: None,
             navdata_info: None,
             livery_aircraft_type: None,
+            version_info,
         }))
     }
 
@@ -2739,6 +2744,7 @@ impl Scanner {
             extraction_chain: None,
             navdata_info: None,
             livery_aircraft_type: None,
+            version_info: None, // Archive version detection requires extraction, done separately
         }))
     }
 
@@ -2778,6 +2784,7 @@ impl Scanner {
             extraction_chain: None,
             navdata_info: None,
             livery_aircraft_type: None,
+            version_info: None,
         }))
     }
 
@@ -2802,6 +2809,7 @@ impl Scanner {
                 extraction_chain: None,
                 navdata_info: None,
                 livery_aircraft_type: None,
+                version_info: None,
             }))
         } else {
             Ok(None)
@@ -2886,6 +2894,7 @@ impl Scanner {
             extraction_chain: None,
             navdata_info: None,
             livery_aircraft_type: None,
+            version_info: None,
         }))
     }
 
@@ -2935,6 +2944,7 @@ impl Scanner {
             extraction_chain: None,
             navdata_info: None,
             livery_aircraft_type: None,
+            version_info: None,
         }))
     }
 
@@ -2997,6 +3007,10 @@ impl Scanner {
             .unwrap_or("Unknown Plugin")
             .to_string();
 
+        // Read version info from the install folder
+        let (version, _, _) = crate::management_index::read_version_info_with_url(&install_path);
+        let version_info = version.map(|v| crate::models::VersionInfo { version: Some(v) });
+
         Ok(Some(DetectedItem {
             original_input_path: String::new(),
             addon_type: AddonType::Plugin,
@@ -3006,6 +3020,7 @@ impl Scanner {
             extraction_chain: None,
             navdata_info: None,
             livery_aircraft_type: None,
+            version_info,
         }))
     }
 
@@ -3066,6 +3081,7 @@ impl Scanner {
             extraction_chain: None,
             navdata_info: None,
             livery_aircraft_type: None,
+            version_info: None, // Archive version detection requires extraction, done separately
         }))
     }
 
@@ -3108,6 +3124,7 @@ impl Scanner {
             extraction_chain: None,
             navdata_info: Some(navdata_info),
             livery_aircraft_type: None,
+            version_info: None,
         }))
     }
 
@@ -3157,6 +3174,7 @@ impl Scanner {
             extraction_chain: None,
             navdata_info: Some(navdata_info),
             livery_aircraft_type: None,
+            version_info: None,
         }))
     }
 
@@ -3193,6 +3211,7 @@ impl Scanner {
                 extraction_chain: None,
                 navdata_info: None,
                 livery_aircraft_type: Some(aircraft_type_id.to_string()),
+                version_info: None,
             }))
         } else {
             Ok(None)
@@ -3241,6 +3260,7 @@ impl Scanner {
                 extraction_chain: None,
                 navdata_info: None,
                 livery_aircraft_type: Some(aircraft_type_id.to_string()),
+                version_info: None,
             }))
         } else {
             Ok(None)

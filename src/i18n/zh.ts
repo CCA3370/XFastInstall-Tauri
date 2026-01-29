@@ -213,9 +213,12 @@ export default {
     confirmTrustArchive: '我信任此压缩包，继续安装',
     existingCycle: '已存在',
     newCycle: '待安装',
+    existingVersion: '已安装版本',
+    newVersion: '新版本',
     unknown: '未知',
     noConfigPatternsHint: '需要在设置中配置备份规则',
     liveryAircraftNotFound: '未找到目标机模',
+    targetLockedWarning: '目标已存在且被锁定',
     // Close confirmation
     unsavedSceneryChangesTitle: '地景排序未保存',
     unsavedSceneryChangesMessage: '您有未保存的地景排序更改，确定要关闭吗？',
@@ -437,7 +440,9 @@ export default {
     toggleFailed: '切换状态失败',
     openFolderFailed: '打开文件夹失败',
     scanFailed: '扫描失败',
-    noItems: '未找到任何项目'
+    noItems: '未找到任何项目',
+    lock: '锁定',
+    unlock: '解锁'
   },
   errors: {
     validation_failed: '输入数据无效',

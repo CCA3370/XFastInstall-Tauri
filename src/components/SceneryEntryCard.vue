@@ -6,6 +6,7 @@ import { useAppStore } from '@/stores/app'
 import { useToastStore } from '@/stores/toast'
 import { useModalStore } from '@/stores/modal'
 import { useSceneryStore } from '@/stores/scenery'
+import { useLockStore } from '@/stores/lock'
 import ConfirmModal from '@/components/ConfirmModal.vue'
 import type { SceneryManagerEntry } from '@/types'
 import { SceneryCategory, parseApiError, getErrorMessage } from '@/types'
@@ -30,6 +31,7 @@ const appStore = useAppStore()
 const toastStore = useToastStore()
 const modalStore = useModalStore()
 const sceneryStore = useSceneryStore()
+const lockStore = useLockStore()
 
 const showMissingLibsModal = ref(false)
 const showDeleteConfirmModal = ref(false)
@@ -57,6 +59,13 @@ const categoryConfig = computed(() => {
 const hasMissingDeps = computed(() => props.entry.missingLibraries.length > 0)
 const isFirst = computed(() => props.index === 0)
 const isLast = computed(() => props.index === props.totalCount - 1)
+
+// Lock state
+const isItemLocked = computed(() => lockStore.isLocked('scenery', props.entry.folderName))
+
+function handleToggleLock() {
+  lockStore.toggleLock('scenery', props.entry.folderName)
+}
 
 async function handleDoubleClick() {
   if (!appStore.xplanePath) {
@@ -227,6 +236,25 @@ async function handleDeleteConfirm() {
         </svg>
       </button>
     </div>
+
+    <!-- Lock button -->
+    <button
+      @click.stop="handleToggleLock"
+      class="flex-shrink-0 p-0.5 rounded transition-colors"
+      :class="isItemLocked
+        ? 'text-amber-500 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30'
+        : 'text-gray-400 dark:text-gray-500 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30'"
+      :title="isItemLocked ? t('management.unlock') : t('management.lock')"
+    >
+      <!-- Locked icon (solid) -->
+      <svg v-if="isItemLocked" class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+        <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+      </svg>
+      <!-- Unlocked icon (outline) -->
+      <svg v-else class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+      </svg>
+    </button>
 
     <!-- Delete button -->
     <button

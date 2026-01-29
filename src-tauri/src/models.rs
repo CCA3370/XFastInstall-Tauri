@@ -52,6 +52,14 @@ pub struct NavdataInfo {
     pub airac: Option<String>,
 }
 
+/// Version information for Aircraft/Plugin
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionInfo {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstallTask {
@@ -95,6 +103,12 @@ pub struct InstallTask {
     /// For Navdata: new cycle info to be installed
     #[serde(skip_serializing_if = "Option::is_none")]
     pub new_navdata_info: Option<NavdataInfo>,
+    /// For Aircraft/Plugin: existing version info (if conflict exists)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub existing_version_info: Option<VersionInfo>,
+    /// For Aircraft/Plugin: new version info to be installed
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub new_version_info: Option<VersionInfo>,
     /// Whether to backup liveries during clean install (Aircraft only)
     pub backup_liveries: bool,
     /// Whether to backup configuration files during clean install (Aircraft only)
@@ -155,6 +169,8 @@ pub struct DetectedItem {
     pub navdata_info: Option<NavdataInfo>,
     /// For Livery: the aircraft type this livery belongs to (e.g., "FF777")
     pub livery_aircraft_type: Option<String>,
+    /// For Aircraft/Plugin: version info from the addon to be installed
+    pub version_info: Option<VersionInfo>,
 }
 
 /// Installation progress event sent to frontend
@@ -456,6 +472,8 @@ pub struct AircraftInfo {
     pub latest_version: Option<String>,
     /// Whether an update is available
     pub has_update: bool,
+    /// Whether disabled in skunkcrafts_updater.cfg (disabled|true)
+    pub cfg_disabled: Option<bool>,
 }
 
 /// Plugin information for management UI
@@ -474,6 +492,8 @@ pub struct PluginInfo {
     pub latest_version: Option<String>,
     /// Whether an update is available
     pub has_update: bool,
+    /// Whether disabled in skunkcrafts_updater.cfg (disabled|true)
+    pub cfg_disabled: Option<bool>,
 }
 
 /// Navdata manager information for management UI

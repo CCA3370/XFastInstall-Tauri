@@ -179,7 +179,7 @@ fn scan_single_aircraft_folder(
     };
 
     // Read version info (priority: skunkcrafts_updater.cfg > version files)
-    let (version, update_url) =
+    let (version, update_url, cfg_disabled) =
         read_version_from_paths(updater_cfg_path.as_deref(), &version_file_paths);
 
     let relative_path = folder
@@ -199,16 +199,18 @@ fn scan_single_aircraft_folder(
         update_url,
         latest_version: None, // Will be populated by check_aircraft_updates
         has_update: false,    // Will be set by check_aircraft_updates
+        cfg_disabled,
     })
 }
 
 /// Read version from already-discovered paths (avoids extra directory reads)
-/// Returns (version, update_url) tuple
-fn read_version_from_paths(
+/// Returns (version, update_url, cfg_disabled) tuple
+pub fn read_version_from_paths(
     updater_cfg: Option<&Path>,
     version_files: &[std::path::PathBuf],
-) -> (Option<String>, Option<String>) {
+) -> (Option<String>, Option<String>, Option<bool>) {
     let mut update_url: Option<String> = None;
+    let mut cfg_disabled: Option<bool> = None;
 
     // First, try skunkcrafts_updater.cfg (higher priority)
     if let Some(cfg_path) = updater_cfg {
@@ -235,11 +237,17 @@ fn read_version_from_paths(
                             update_url = Some(url.to_string());
                         }
                     }
+                } else if line_lower.starts_with("disabled|") {
+                    let parts: Vec<&str> = line.splitn(2, '|').collect();
+                    if parts.len() == 2 {
+                        let value = parts[1].trim().to_lowercase();
+                        cfg_disabled = Some(value == "true" || value == "1");
+                    }
                 }
             }
 
             if cfg_version.is_some() {
-                return (cfg_version, update_url);
+                return (cfg_version, update_url, cfg_disabled);
             }
         }
     }
@@ -273,27 +281,27 @@ fn read_version_from_paths(
         }
     }
     if !version_tokens.is_empty() {
-        return (Some(version_tokens.join("/")), update_url);
+        return (Some(version_tokens.join("/")), update_url, cfg_disabled);
     }
 
     // Fallback: try to parse pure digit string (e.g., "020310" -> "2.3.10")
     if let Some(ref first_line) = first_line_fallback {
         if let Some(parsed) = try_parse_digit_version(first_line) {
-            return (Some(parsed), update_url);
+            return (Some(parsed), update_url, cfg_disabled);
         }
         // Last resort: return the first line as-is
-        return (first_line_fallback, update_url);
+        return (first_line_fallback, update_url, cfg_disabled);
     }
 
-    (None, update_url)
+    (None, update_url, cfg_disabled)
 }
 
 /// Read version information from a folder (used by plugins where we don't have pre-collected paths)
-/// Returns (version, update_url) tuple
-fn read_version_info_with_url(folder: &Path) -> (Option<String>, Option<String>) {
+/// Returns (version, update_url, cfg_disabled) tuple
+pub fn read_version_info_with_url(folder: &Path) -> (Option<String>, Option<String>, Option<bool>) {
     let read_dir = match fs::read_dir(folder) {
         Ok(rd) => rd,
-        Err(_) => return (None, None),
+        Err(_) => return (None, None, None),
     };
 
     let mut updater_cfg_path: Option<std::path::PathBuf> = None;
@@ -326,7 +334,7 @@ fn read_version_info_with_url(folder: &Path) -> (Option<String>, Option<String>)
 }
 
 /// Check if a string contains a version-like pattern (digit(s).digit(s))
-fn has_version_pattern(s: &str) -> bool {
+pub fn has_version_pattern(s: &str) -> bool {
     let bytes = s.as_bytes();
     let len = bytes.len();
     let mut i = 0;
@@ -352,7 +360,7 @@ fn has_version_pattern(s: &str) -> bool {
 /// Try to parse a pure digit string as a version by splitting every 2 characters
 /// and removing leading zeros from each part.
 /// Example: "020310" -> "2.3.10"
-fn try_parse_digit_version(s: &str) -> Option<String> {
+pub fn try_parse_digit_version(s: &str) -> Option<String> {
     let digits: String = s.chars().filter(|c| c.is_ascii_digit()).collect();
 
     // Must have at least 4 digits to split into meaningful parts
@@ -459,7 +467,7 @@ fn scan_single_plugin_folder(path: &Path, folder_name: &str) -> Option<PluginInf
     let platform = detect_plugin_platform(path, &all_files);
 
     // Read version info with update URL
-    let (version, update_url) = read_version_info_with_url(path);
+    let (version, update_url, cfg_disabled) = read_version_info_with_url(path);
 
     Some(PluginInfo {
         folder_name: folder_name.to_string(),
@@ -471,6 +479,7 @@ fn scan_single_plugin_folder(path: &Path, folder_name: &str) -> Option<PluginInf
         update_url,
         latest_version: None, // Will be populated by check_plugins_updates
         has_update: false,    // Will be set by check_plugins_updates
+        cfg_disabled,
     })
 }
 
@@ -963,4 +972,75 @@ async fn fetch_remote_version(base_url: String) -> Option<String> {
     }
 
     None
+}
+
+/// Set the disabled| field in skunkcrafts_updater.cfg for an aircraft or plugin
+/// If the cfg file doesn't exist, returns Ok without creating it
+pub fn set_cfg_disabled(
+    xplane_path: &Path,
+    item_type: &str,
+    folder_name: &str,
+    disabled: bool,
+) -> Result<()> {
+    let base_path = match item_type {
+        "aircraft" => xplane_path.join("Aircraft"),
+        "plugin" => xplane_path.join("Resources").join("plugins"),
+        _ => return Err(anyhow!("Unknown item type: {}", item_type)),
+    };
+
+    let folder_path = base_path.join(folder_name);
+    if !folder_path.exists() {
+        return Err(anyhow!("Folder not found: {}", folder_name));
+    }
+
+    let cfg_path = folder_path.join("skunkcrafts_updater.cfg");
+
+    // If cfg file doesn't exist, skip write per user preference
+    if !cfg_path.exists() {
+        logger::log_debug(
+            &format!(
+                "No skunkcrafts_updater.cfg found for {}, skipping disabled write",
+                folder_name
+            ),
+            Some("management"),
+            None,
+        );
+        return Ok(());
+    }
+
+    // Read the existing file
+    let content = fs::read_to_string(&cfg_path)?;
+    let mut lines: Vec<String> = content.lines().map(|s| s.to_string()).collect();
+
+    // Find and update the disabled| line, or add it if not present
+    let disabled_value = if disabled { "true" } else { "false" };
+    let disabled_line = format!("disabled|{}", disabled_value);
+    let mut found = false;
+
+    for line in &mut lines {
+        if line.trim().to_lowercase().starts_with("disabled|") {
+            *line = disabled_line.clone();
+            found = true;
+            break;
+        }
+    }
+
+    if !found {
+        // Add the disabled line at the end
+        lines.push(disabled_line);
+    }
+
+    // Write back to file
+    let new_content = lines.join("\n");
+    fs::write(&cfg_path, new_content)?;
+
+    logger::log_info(
+        &format!(
+            "Set disabled|{} in {} for {}",
+            disabled_value, cfg_path.display(), folder_name
+        ),
+        Some("management"),
+    );
+
+    Ok(())
 }

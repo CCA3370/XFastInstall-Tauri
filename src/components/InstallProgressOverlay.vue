@@ -113,6 +113,12 @@
               <span class="font-semibold text-gray-900 dark:text-white truncate leading-tight" :class="sizeConfig.nameSize">
                 {{ task.displayName }}
               </span>
+              <!-- Version number (if available) -->
+              <span v-if="task.newVersionInfo?.version"
+                    class="text-gray-400 dark:text-gray-500 flex-shrink-0"
+                    :class="sizeConfig.typeSize">
+                v{{ task.newVersionInfo.version }}
+              </span>
               <!-- Click hint for failed tasks -->
               <span v-if="isTaskFailed(index) && isComplete" class="text-xs text-red-400 dark:text-red-500 flex-shrink-0">
                 ({{ $t('completion.viewFailedTasks') || 'View Details' }})

@@ -1,4 +1,5 @@
 mod analyzer;
+mod app_dirs;
 mod atomic_installer;
 mod cache;
 mod database;
@@ -713,9 +714,27 @@ async fn open_management_folder(
     .to_tauri_error()
 }
 
+#[tauri::command]
+async fn set_cfg_disabled(
+    xplane_path: String,
+    item_type: String,
+    folder_name: String,
+    disabled: bool,
+) -> Result<(), String> {
+    tokio::task::spawn_blocking(move || {
+        let xplane_path = std::path::Path::new(&xplane_path);
+        management_index::set_cfg_disabled(xplane_path, &item_type, &folder_name, disabled)
+            .map_err(|e| error::ApiError::from(e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+    .to_tauri_error()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // When a second instance is launched, this callback is triggered
@@ -792,7 +811,8 @@ pub fn run() {
             scan_navdata,
             toggle_management_item,
             delete_management_item,
-            open_management_folder
+            open_management_folder,
+            set_cfg_disabled
         ])
         .setup(|app| {
             // Initialize TaskControl state

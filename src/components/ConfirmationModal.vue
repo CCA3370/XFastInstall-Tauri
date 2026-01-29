@@ -7,9 +7,9 @@
           <div class="modal-header mb-2 flex-shrink-0">
             <div class="flex items-center justify-between">
               <div class="flex items-center space-x-2">
-                <div class="w-7 h-7 bg-gradient-to-r from-green-500 to-blue-600 rounded-lg flex items-center justify-center">
-                  <svg class="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                <div class="w-9 h-9 bg-blue-600 dark:bg-blue-500 rounded-lg flex items-center justify-center">
+                  <svg class="w-4.5 h-4.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
                   </svg>
                 </div>
                 <div>
@@ -49,17 +49,17 @@
               class="task-item bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-white/10 rounded-lg p-2 mb-1.5 hover:border-blue-400 dark:hover:border-blue-400/30 transition-colors duration-200"
               :class="{
                 'opacity-50': !store.getTaskEnabled(task.id),
-                'cursor-pointer': !isLiveryWithoutAircraft(task),
-                'cursor-not-allowed': isLiveryWithoutAircraft(task)
+                'cursor-pointer': !isTaskDisabled(task),
+                'cursor-not-allowed': isTaskDisabled(task)
               }"
-              @click="!isLiveryWithoutAircraft(task) && toggleTaskEnabled(task.id)"
+              @click="!isTaskDisabled(task) && toggleTaskEnabled(task.id)"
             >
               <div class="flex items-start gap-2">
                 <!-- Checkbox with better styling -->
                 <div class="flex-shrink-0 pt-0.5">
                   <div class="custom-checkbox" :class="{
                     'checked': store.getTaskEnabled(task.id),
-                    'disabled': isLiveryWithoutAircraft(task)
+                    'disabled': isTaskDisabled(task)
                   }">
                     <svg v-if="store.getTaskEnabled(task.id)" class="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"></path>
@@ -75,7 +75,7 @@
                     </span>
                     <span class="font-medium text-gray-900 dark:text-white text-xs truncate">{{ task.displayName }}</span>
                   </div>
-                  <div v-if="!isLiveryWithoutAircraft(task)" class="flex items-center space-x-1 text-xs text-gray-500 dark:text-gray-400">
+                  <div v-if="!isTaskDisabled(task)" class="flex items-center space-x-1 text-xs text-gray-500 dark:text-gray-400">
                     <svg class="w-2.5 h-2.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z"></path>
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v2H8V5z"></path>
@@ -83,13 +83,23 @@
                     <span class="truncate text-xs"><AnimatedText>{{ $t('modal.targetPath') }}</AnimatedText>: {{ getRelativePath(task.targetPath) }}</span>
                   </div>
 
-                  <!-- Conflict warning with install mode toggle switch -->
-                  <div v-if="task.conflictExists" class="mt-1.5">
+                  <!-- Conflict warning with install mode toggle switch (only for non-locked conflicts) -->
+                  <div v-if="task.conflictExists && !isLockedConflict(task)" class="mt-1.5">
                     <div class="flex items-center space-x-1.5 text-xs text-yellow-600 dark:text-yellow-400 mb-1.5">
-                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z"></path>
                       </svg>
                       <span><AnimatedText>{{ $t('modal.folderExists') }}</AnimatedText></span>
+                      <!-- Inline version comparison for Aircraft/Plugin -->
+                      <template v-if="(task.type === 'Aircraft' || task.type === 'Plugin')
+                                      && (task.existingVersionInfo?.version || task.newVersionInfo?.version)">
+                        <span class="text-gray-400 dark:text-gray-500">·</span>
+                        <span class="text-blue-600 dark:text-blue-400">
+                          {{ task.existingVersionInfo?.version || '?' }}
+                          <span class="text-gray-400 dark:text-gray-500 mx-0.5">→</span>
+                          {{ task.newVersionInfo?.version || '?' }}
+                        </span>
+                      </template>
                     </div>
 
                     <!-- Install mode toggle switch with mode name on the right -->
@@ -148,8 +158,8 @@
                     </div>
                   </div>
 
-                  <!-- Navdata cycle comparison -->
-                  <div v-if="task.type === 'Navdata' && task.conflictExists && task.existingNavdataInfo"
+                  <!-- Navdata cycle comparison (only for non-locked conflicts) -->
+                  <div v-if="task.type === 'Navdata' && task.conflictExists && !isLockedConflict(task) && task.existingNavdataInfo"
                        class="mt-1.5 p-2 bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/20 rounded">
                     <div class="flex items-center space-x-2 text-xs">
                       <svg class="w-3.5 h-3.5 text-blue-500 dark:text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -193,6 +203,14 @@
                     </svg>
                     <span class="font-medium"><AnimatedText>{{ $t('modal.liveryAircraftNotFound') }}</AnimatedText></span>
                   </div>
+
+                  <!-- Locked conflict warning -->
+                  <div v-if="isLockedConflict(task)" class="mt-1.5 flex items-center space-x-1.5 text-xs text-amber-600 dark:text-amber-400">
+                    <svg class="w-3.5 h-3.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
+                    </svg>
+                    <span class="font-medium"><AnimatedText>{{ $t('modal.targetLockedWarning') }}</AnimatedText></span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -234,12 +252,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useAppStore } from '@/stores/app'
+import { useLockStore } from '@/stores/lock'
 import { AddonType, NavdataInfo } from '@/types'
 import AnimatedText from '@/components/AnimatedText.vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 const store = useAppStore()
+const lockStore = useLockStore()
 
 defineEmits(['close', 'confirm'])
 
@@ -323,6 +343,17 @@ function toggleTaskEnabled(taskId: string) {
 // Check if task is a livery without installed aircraft
 function isLiveryWithoutAircraft(task: any): boolean {
   return task.type === 'Livery' && task.liveryAircraftFound === false
+}
+
+// Check if task has a locked conflict (target exists and is locked)
+function isLockedConflict(task: any): boolean {
+  if (!task.conflictExists) return false
+  return lockStore.isPathLocked(task.targetPath, store.xplanePath)
+}
+
+// Check if task should be disabled (livery without aircraft OR locked conflict)
+function isTaskDisabled(task: any): boolean {
+  return isLiveryWithoutAircraft(task) || isLockedConflict(task)
 }
 
 // Get backup liveries setting for a task

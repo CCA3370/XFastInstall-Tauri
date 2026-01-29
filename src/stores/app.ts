@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { AddonType, type InstallTask, type InstallResult } from '@/types'
+import { useLockStore } from './lock'
+import { getItem, setItem, STORAGE_KEYS } from '@/services/storage'
 
 export type LogLevel = 'basic' | 'full' | 'debug'
 
@@ -86,6 +88,9 @@ export const useAppStore = defineStore('app', () => {
   // Unified per-task state management (taskId -> TaskState)
   const taskStates = ref<Record<string, TaskState>>({})
 
+  // Initialization flag
+  const isInitialized = ref(false)
+
   /** Get default task state */
   function getDefaultTaskState(enabled = true): TaskState {
     return {
@@ -104,7 +109,7 @@ export const useAppStore = defineStore('app', () => {
     return taskStates.value[taskId]
   }
 
-  // Config file patterns for backup (stored in localStorage)
+  // Config file patterns for backup (stored in storage)
   const configFilePatterns = ref<string[]>(['*_prefs.txt'])
 
   // Check if any task has conflicts
@@ -129,141 +134,94 @@ export const useAppStore = defineStore('app', () => {
     return currentTasks.value.filter(task => getTaskEnabled(task.id)).length
   })
 
-  // Load settings with validation and error recovery
-  const savedPath = localStorage.getItem('xplanePath')
-  if (savedPath) xplanePath.value = savedPath
+  /** Initialize store by loading saved settings from Tauri Store */
+  async function initStore(): Promise<void> {
+    if (isInitialized.value) return
 
-  const savedPrefs = localStorage.getItem('installPreferences')
-  if (savedPrefs) {
-    try {
-      const parsed = JSON.parse(savedPrefs)
-      // Validate that parsed data is an object
-      if (typeof parsed === 'object' && parsed !== null) {
-        installPreferences.value = { ...installPreferences.value, ...parsed }
-      } else {
-        console.warn('Invalid install preferences format, using defaults')
-        localStorage.removeItem('installPreferences')
-      }
-    } catch (e) {
-      console.error('Failed to parse install preferences, clearing corrupted data', e)
-      localStorage.removeItem('installPreferences')
+    // Load xplanePath
+    const savedPath = await getItem<string>(STORAGE_KEYS.XPLANE_PATH)
+    if (savedPath) xplanePath.value = savedPath
+
+    // Load install preferences
+    const savedPrefs = await getItem<Record<AddonType, boolean>>(STORAGE_KEYS.INSTALL_PREFERENCES)
+    if (savedPrefs && typeof savedPrefs === 'object') {
+      installPreferences.value = { ...installPreferences.value, ...savedPrefs }
     }
-  }
 
-  // Load log level with validation
-  const savedLogLevel = localStorage.getItem('logLevel')
-  if (savedLogLevel && ['basic', 'full', 'debug'].includes(savedLogLevel)) {
-    logLevel.value = savedLogLevel as LogLevel
-  } else if (savedLogLevel) {
-    console.warn('Invalid log level, using default')
-    localStorage.removeItem('logLevel')
-  }
-
-  // Load config file patterns with validation
-  const savedPatterns = localStorage.getItem('configFilePatterns')
-  if (savedPatterns) {
-    try {
-      const parsed = JSON.parse(savedPatterns)
-      // Validate that parsed data is an array of strings
-      if (Array.isArray(parsed) && parsed.every(item => typeof item === 'string')) {
-        configFilePatterns.value = parsed
-      } else {
-        console.warn('Invalid config file patterns format, using defaults')
-        localStorage.removeItem('configFilePatterns')
-      }
-    } catch (e) {
-      console.error('Failed to parse config file patterns, clearing corrupted data', e)
-      localStorage.removeItem('configFilePatterns')
+    // Load log level
+    const savedLogLevel = await getItem<LogLevel>(STORAGE_KEYS.LOG_LEVEL)
+    if (savedLogLevel && ['basic', 'full', 'debug'].includes(savedLogLevel)) {
+      logLevel.value = savedLogLevel
     }
-  }
 
-  // Load verification preferences with validation
-  const savedVerificationPrefs = localStorage.getItem('verificationPreferences')
-  if (savedVerificationPrefs) {
-    try {
-      const parsed = JSON.parse(savedVerificationPrefs)
-      // Validate that parsed data is an object
-      if (typeof parsed === 'object' && parsed !== null) {
-        verificationPreferences.value = { ...verificationPreferences.value, ...parsed }
-      } else {
-        console.warn('Invalid verification preferences format, using defaults')
-        localStorage.removeItem('verificationPreferences')
-      }
-    } catch (e) {
-      console.error('Failed to parse verification preferences, clearing corrupted data', e)
-      localStorage.removeItem('verificationPreferences')
+    // Load config file patterns
+    const savedPatterns = await getItem<string[]>(STORAGE_KEYS.CONFIG_FILE_PATTERNS)
+    if (Array.isArray(savedPatterns) && savedPatterns.every(item => typeof item === 'string')) {
+      configFilePatterns.value = savedPatterns
     }
-  }
 
-  // Load atomic install setting
-  const savedAtomicInstall = localStorage.getItem('atomicInstallEnabled')
-  if (savedAtomicInstall !== null) {
-    try {
-      atomicInstallEnabled.value = JSON.parse(savedAtomicInstall)
-    } catch (e) {
-      console.error('Failed to parse atomic install setting, using default', e)
-      localStorage.removeItem('atomicInstallEnabled')
+    // Load verification preferences
+    const savedVerificationPrefs = await getItem<Record<string, boolean>>(STORAGE_KEYS.VERIFICATION_PREFERENCES)
+    if (savedVerificationPrefs && typeof savedVerificationPrefs === 'object') {
+      verificationPreferences.value = { ...verificationPreferences.value, ...savedVerificationPrefs }
     }
-  }
 
-  // Load delete source after install setting
-  const savedDeleteSource = localStorage.getItem('deleteSourceAfterInstall')
-  if (savedDeleteSource !== null) {
-    try {
-      deleteSourceAfterInstall.value = JSON.parse(savedDeleteSource)
-    } catch (e) {
-      console.error('Failed to parse delete source setting, using default', e)
-      localStorage.removeItem('deleteSourceAfterInstall')
+    // Load atomic install setting
+    const savedAtomicInstall = await getItem<boolean>(STORAGE_KEYS.ATOMIC_INSTALL_ENABLED)
+    if (typeof savedAtomicInstall === 'boolean') {
+      atomicInstallEnabled.value = savedAtomicInstall
     }
-  }
 
-  // Load scenery auto-sort setting
-  const savedAutoSortScenery = localStorage.getItem('autoSortScenery')
-  if (savedAutoSortScenery !== null) {
-    try {
-      autoSortScenery.value = JSON.parse(savedAutoSortScenery)
-    } catch (e) {
-      console.error('Failed to parse auto-sort scenery setting, using default', e)
-      localStorage.removeItem('autoSortScenery')
+    // Load delete source after install setting
+    const savedDeleteSource = await getItem<boolean>(STORAGE_KEYS.DELETE_SOURCE_AFTER_INSTALL)
+    if (typeof savedDeleteSource === 'boolean') {
+      deleteSourceAfterInstall.value = savedDeleteSource
     }
+
+    // Load scenery auto-sort setting
+    const savedAutoSortScenery = await getItem<boolean>(STORAGE_KEYS.AUTO_SORT_SCENERY)
+    if (typeof savedAutoSortScenery === 'boolean') {
+      autoSortScenery.value = savedAutoSortScenery
+    }
+
+    isInitialized.value = true
   }
 
-  function setXplanePath(path: string) {
+  async function setXplanePath(path: string) {
     xplanePath.value = path
-    localStorage.setItem('xplanePath', path)
+    await setItem(STORAGE_KEYS.XPLANE_PATH, path)
   }
 
-  function loadXplanePath() {
-    // Already loaded in init, but kept for interface compatibility if needed
-    const saved = localStorage.getItem('xplanePath')
+  async function loadXplanePath() {
+    const saved = await getItem<string>(STORAGE_KEYS.XPLANE_PATH)
     if (saved) {
       xplanePath.value = saved
     }
   }
 
-  function togglePreference(type: AddonType) {
+  async function togglePreference(type: AddonType) {
     installPreferences.value[type] = !installPreferences.value[type]
-    localStorage.setItem('installPreferences', JSON.stringify(installPreferences.value))
+    await setItem(STORAGE_KEYS.INSTALL_PREFERENCES, installPreferences.value)
   }
 
-  function toggleVerificationPreference(sourceType: string) {
+  async function toggleVerificationPreference(sourceType: string) {
     verificationPreferences.value[sourceType] = !verificationPreferences.value[sourceType]
-    localStorage.setItem('verificationPreferences', JSON.stringify(verificationPreferences.value))
+    await setItem(STORAGE_KEYS.VERIFICATION_PREFERENCES, verificationPreferences.value)
   }
 
-  function toggleAtomicInstall() {
+  async function toggleAtomicInstall() {
     atomicInstallEnabled.value = !atomicInstallEnabled.value
-    localStorage.setItem('atomicInstallEnabled', JSON.stringify(atomicInstallEnabled.value))
+    await setItem(STORAGE_KEYS.ATOMIC_INSTALL_ENABLED, atomicInstallEnabled.value)
   }
 
-  function toggleDeleteSourceAfterInstall() {
+  async function toggleDeleteSourceAfterInstall() {
     deleteSourceAfterInstall.value = !deleteSourceAfterInstall.value
-    localStorage.setItem('deleteSourceAfterInstall', JSON.stringify(deleteSourceAfterInstall.value))
+    await setItem(STORAGE_KEYS.DELETE_SOURCE_AFTER_INSTALL, deleteSourceAfterInstall.value)
   }
 
-  function toggleAutoSortScenery() {
+  async function toggleAutoSortScenery() {
     autoSortScenery.value = !autoSortScenery.value
-    localStorage.setItem('autoSortScenery', JSON.stringify(autoSortScenery.value))
+    await setItem(STORAGE_KEYS.AUTO_SORT_SCENERY, autoSortScenery.value)
   }
 
   function showSceneryManagerHint(messageKey: string) {
@@ -275,9 +233,9 @@ export const useAppStore = defineStore('app', () => {
     sceneryManagerHintVisible.value = false
   }
 
-  function setLogLevel(level: LogLevel) {
+  async function setLogLevel(level: LogLevel) {
     logLevel.value = level
-    localStorage.setItem('logLevel', level)
+    await setItem(STORAGE_KEYS.LOG_LEVEL, level)
   }
 
   function setCurrentTasks(tasks: InstallTask[]) {
@@ -286,8 +244,12 @@ export const useAppStore = defineStore('app', () => {
     taskStates.value = {}
     // Initialize task states for each task
     // Disable livery tasks where target aircraft is not found
+    // Disable tasks where target is locked
+    const lockStore = useLockStore()
     tasks.forEach(task => {
-      const enabled = !(task.type === AddonType.Livery && task.liveryAircraftFound === false)
+      const isLiveryWithoutAircraft = task.type === AddonType.Livery && task.liveryAircraftFound === false
+      const isLockedConflict = task.conflictExists && lockStore.isPathLocked(task.targetPath, xplanePath.value)
+      const enabled = !isLiveryWithoutAircraft && !isLockedConflict
       taskStates.value[task.id] = getDefaultTaskState(enabled)
     })
   }
@@ -304,8 +266,11 @@ export const useAppStore = defineStore('app', () => {
     currentTasks.value = [...currentTasks.value, ...uniqueNewTasks]
 
     // Initialize state only for new tasks (preserve existing task settings)
+    const lockStore = useLockStore()
     uniqueNewTasks.forEach(task => {
-      const enabled = !(task.type === AddonType.Livery && task.liveryAircraftFound === false)
+      const isLiveryWithoutAircraft = task.type === AddonType.Livery && task.liveryAircraftFound === false
+      const isLockedConflict = task.conflictExists && lockStore.isPathLocked(task.targetPath, xplanePath.value)
+      const enabled = !isLiveryWithoutAircraft && !isLockedConflict
       taskStates.value[task.id] = getDefaultTaskState(enabled)
     })
 
@@ -400,9 +365,9 @@ export const useAppStore = defineStore('app', () => {
   }
 
   // Set config file patterns
-  function setConfigFilePatterns(patterns: string[]) {
+  async function setConfigFilePatterns(patterns: string[]) {
     configFilePatterns.value = patterns
-    localStorage.setItem('configFilePatterns', JSON.stringify(patterns))
+    await setItem(STORAGE_KEYS.CONFIG_FILE_PATTERNS, patterns)
   }
 
   // Get config file patterns
@@ -510,6 +475,8 @@ export const useAppStore = defineStore('app', () => {
     showCompletion,
     showCompletionAnimation,
     installingTasks,
+    isInitialized,
+    initStore,
     setXplanePath,
     loadXplanePath,
     togglePreference,

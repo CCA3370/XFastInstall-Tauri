@@ -276,6 +276,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import { AddonType, getErrorMessage } from '@/types'
 import { validateGlobPattern } from '@/utils/validation'
+import { setItem, STORAGE_KEYS } from '@/services/storage'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -663,7 +664,7 @@ async function finishOnboarding() {
       store.toggleAutoSortScenery()
     }
 
-    localStorage.setItem('onboardingCompleted', 'true')
+    await setItem(STORAGE_KEYS.ONBOARDING_COMPLETED, 'true')
     await router.replace('/')
   } catch (error) {
     modal.showError(t('common.error') + ': ' + getErrorMessage(error))
